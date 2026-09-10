@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Doc2MD Pro - Chuyển Đổi Hàng Loạt PDF, DOC, XLS Sang Markdown</title>
-  <meta name="description" content="Chuyển đổi đồng thời nhiều tài liệu PDF, Word (.doc, .docx), Excel (.xls, .xlsx) sang Markdown với Microsoft MarkItDown và OCR cục bộ." />
+  <title>Doc2MD Pro - AI Knowledge Base & RAG Converter</title>
+  <meta name="description" content="Chuyển đổi tài liệu PDF, DOCX, DOC, XLSX, XLS sang Markdown chuẩn cho AI Knowledge Base, ChatGPT Knowledge và RAG." />
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,7 +20,7 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
-  <link rel="stylesheet" href="/static/style.css?v=2.2">
+  <link rel="stylesheet" href="/static/style.css?v=3.0">
 </head>
 <body>
   <div class="app-bg-mesh"></div>
@@ -33,20 +33,20 @@
     <header class="app-header">
       <div class="brand-section">
         <div class="brand-icon-wrapper">
-          <i data-lucide="file-text"></i>
+          <i data-lucide="brain-circuit"></i>
         </div>
         <div class="brand-text">
-          <h1>Doc2MD Pro <span class="badge badge-accent">Batch Converter</span></h1>
-          <p>Chuyển đổi hàng loạt tài liệu PDF, DOC/DOCX, XLS/XLSX sang Markdown chuẩn</p>
+          <h1>Doc2MD Pro <span class="badge badge-accent">AI Knowledge Base</span></h1>
+          <p>Chuyển đổi tài liệu sang Markdown chuẩn AI Knowledge Base, RAG & ChatGPT</p>
         </div>
       </div>
 
       <div class="header-actions">
         <button id="batchDownloadBtnTop" class="btn btn-primary" style="display: none;">
-          <i data-lucide="archive"></i> Tải Tất Cả (.zip) <span id="batchCountBadge" class="badge badge-accent" style="margin-left: 4px;">0</span>
+          <i data-lucide="archive"></i> Tải Gói Knowledge Base (.zip) <span id="batchCountBadge" class="badge badge-accent" style="margin-left: 4px;">0</span>
         </button>
 
-        <div id="systemHealth" class="health-badge" title="Trạng thái hệ thống OCR & LibreOffice">
+        <div id="systemHealth" class="health-badge" title="Trạng thái hệ thống">
           <span class="status-dot"></span>
           <span id="healthText">Đang kiểm tra hệ thống...</span>
         </div>
@@ -66,8 +66,8 @@
           <div class="dropzone-icon">
             <i data-lucide="upload-cloud"></i>
           </div>
-          <h3>Kéo thả nhiều tệp vào đây</h3>
-          <p>Hỗ trợ chọn hoặc kéo thả <strong>nhiều file cùng lúc</strong></p>
+          <h3>Kéo thả tài liệu vào đây</h3>
+          <p>Tự động tạo <strong>00_Master_Index.md</strong>, <strong>manifest.json</strong> & YAML Metadata</p>
           
           <div class="format-badges">
             <span class="badge badge-red">PDF (Auto OCR)</span>
@@ -76,16 +76,16 @@
           </div>
 
           <button id="selectFileBtn" type="button" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">
-            <i data-lucide="folder-open"></i> Chọn nhiều tệp từ máy
+            <i data-lucide="folder-open"></i> Chọn tài liệu từ máy
           </button>
         </div>
 
         <!-- File Queue Panel -->
         <div class="glass-card file-queue-card">
           <div class="panel-header">
-            <h4><i data-lucide="layers"></i> Danh Sách Tệp (<span id="fileCountText">0</span>)</h4>
+            <h4><i data-lucide="layers"></i> Danh Sách Tài Liệu (<span id="fileCountText">0</span>)</h4>
             <div style="display: flex; gap: 0.35rem;">
-              <button id="clearAllBtn" class="btn btn-secondary btn-sm" title="Xóa tất cả tệp khỏi danh sách" style="display: none; padding: 0.25rem 0.55rem; font-size: 0.75rem;">
+              <button id="clearAllBtn" class="btn btn-secondary btn-sm" title="Xóa tất cả" style="display: none; padding: 0.25rem 0.55rem; font-size: 0.75rem;">
                 <i data-lucide="trash-2"></i> Xóa hết
               </button>
             </div>
@@ -95,7 +95,7 @@
             <div class="queue-empty">
               <i data-lucide="files" opacity="0.4"></i>
               <p>Chưa có tệp nào trong danh sách</p>
-              <span>Kéo thả hoặc bấm nút trên để chọn nhiều tệp</span>
+              <span>Kéo thả hoặc bấm nút trên để bắt đầu</span>
             </div>
           </div>
         </div>
@@ -103,31 +103,31 @@
         <!-- Conversion Details for Active File -->
         <div id="metaCard" class="glass-card meta-card" style="display: none;">
           <div class="panel-header">
-            <h4><i data-lucide="info"></i> Chi Tiết Tệp Đang Chọn</h4>
+            <h4><i data-lucide="info"></i> Metadata & Kiểm Định</h4>
           </div>
           <div class="meta-content">
             <div class="meta-row">
-              <span>Tên tệp:</span>
-              <strong id="metaFilename">-</strong>
+              <span>Mã tài liệu:</span>
+              <strong id="metaDocId">-</strong>
             </div>
             <div class="meta-row">
-              <span>Tổng số trang:</span>
-              <span id="metaPages">1</span>
+              <span>Tiêu đề:</span>
+              <span id="metaTitle" style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
             </div>
             <div class="meta-row">
-              <span>Trang chạy qua OCR:</span>
-              <span id="metaOcrPages" class="badge badge-yellow">Không có</span>
+              <span>Kiểm định chất lượng:</span>
+              <span id="metaValidation" class="badge badge-green">PASS</span>
             </div>
             <div class="meta-row">
-              <span>Chuyển đổi Legacy (.doc/.xls):</span>
-              <span id="metaLegacy">Không</span>
+              <span>Bảo toàn ký tự:</span>
+              <span id="metaRetention" class="badge badge-blue">100%</span>
             </div>
             <div class="meta-row">
-              <span>Thời gian xử lý:</span>
-              <span id="metaDuration">0 ms</span>
+              <span>Mã băm SHA-256:</span>
+              <code id="metaSha256" style="font-size: 0.65rem; color: var(--accent);">-</code>
             </div>
             <div id="warningsContainer" class="warnings-box" style="display: none;">
-              <h5><i data-lucide="alert-triangle"></i> Cảnh báo:</h5>
+              <h5><i data-lucide="alert-triangle"></i> Cảnh báo kiểm định:</h5>
               <ul id="warningsList"></ul>
             </div>
           </div>
@@ -156,10 +156,10 @@
                 <i data-lucide="copy"></i> Sao chép
               </button>
               <button id="downloadBtn" class="btn btn-secondary" disabled>
-                <i data-lucide="download"></i> Tải file .md này
+                <i data-lucide="download"></i> Tải file này
               </button>
               <button id="batchDownloadBtn" class="btn btn-primary" disabled>
-                <i data-lucide="archive"></i> Tải Tất Cả (.zip)
+                <i data-lucide="archive"></i> Tải Gói Knowledge Base (.zip)
               </button>
             </div>
           </div>
@@ -200,13 +200,13 @@
   <!-- Loading Overlay -->
   <div id="loadingOverlay" class="loading-overlay" style="display: none;">
     <div class="loading-spinner"></div>
-    <h3 id="loadingTitle">Đang chuyển đổi tài liệu...</h3>
-    <p id="loadingDesc">Đang phân tích cấu trúc, bảng biểu và xử lý OCR các trang scan</p>
+    <h3 id="loadingTitle">Đang chuyển đổi và sinh Knowledge Base...</h3>
+    <p id="loadingDesc">Đang chuẩn hóa Unicode NFC, trích xuất Heading, tạo 00_Master_Index.md và kiểm định</p>
   </div>
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/static/app.js?v=2.2"></script>
+  <script src="/static/app.js?v=3.0"></script>
 </body>
 </html>

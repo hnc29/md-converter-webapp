@@ -1,79 +1,95 @@
 import time
 import shutil
 import uuid
+import re
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from docx import Document
-import openpyxl
+
 from ..config import settings
-from ..models import ConvertResponse, PageResult
+from ..models import ConvertResponse, PageResult, KnowledgeBaseResponse
 from .legacy_converter import convert_legacy_document, LegacyConversionError
 from .markitdown_service import markitdown_service
 from .density_checker import density_checker
 from .ocr_adapter import ocr_adapter, OCRAdapterError
 from .markdown_merger import markdown_merger
+from .metadata_extractor import metadata_extractor
+from .structure_normalizer import structure_normalizer
+from .table_processor import table_processor
+from .validator import validator
+from .index_generator import index_generator
 
 class ConversionPipelineError(Exception):
     """General error in conversion pipeline."""
 
-def fallback_docx_to_markdown(docx_path: Path) -> str:
-    """Fallback converter using python-docx when MarkItDown fails on complex XML."""
+def convert_docx_structured(docx_path: Path) -> Tuple[str, str]:
+    """
+    Parses DOCX document preserving headings hierarchy, tables, paragraphs,
+    and lists without losing text or structure.
+    Returns: (markdown_text, raw_source_text)
+    """
     doc = Document(docx_path)
-    md_lines = []
-    for para in doc.paragraphs:
-        text = para.text.strip()
-        if not text:
-            continue
-        style = para.style.name.lower() if para.style else ""
-        if "heading 1" in style:
-            md_lines.append(f"# {text}\n")
-        elif "heading 2" in style:
-            md_lines.append(f"## {text}\n")
-        elif "heading 3" in style:
-            md_lines.append(f"### {text}\n")
-        else:
-            md_lines.append(f"{text}\n")
+    md_lines: List[str] = []
+    raw_text_parts: List[str] = []
 
-    for table in doc.tables:
-        rows_data = []
-        for row in table.rows:
-            row_cells = [c.text.replace("\n", " ").strip() for c in row.cells]
-            rows_data.append(row_cells)
-        if rows_data:
-            hdr = rows_data[0]
-            md_lines.append(f"\n| {' | '.join(hdr)} |")
-            md_lines.append(f"| {' | '.join(['---'] * len(hdr))} |")
-            for r in rows_data[1:]:
-                md_lines.append(f"| {' | '.join(r)} |")
-            md_lines.append("\n")
+    # Process paragraphs and tables in natural document flow
+    for element in doc.element.body:
+        # Check if element is a paragraph
+        if element.tag.endswith('p'):
+            # Find corresponding paragraph object
+            for para in doc.paragraphs:
+                if para._p == element:
+                    text = para.text.strip()
+                    if not text:
+                        continue
+                    raw_text_parts.append(text)
+                    style_name = (para.style.name or "").lower() if para.style else ""
 
-    return "\n".join(md_lines).strip()
+                    if "heading 1" in style_name or "tiêu đề 1" in style_name:
+                        md_lines.append(f"\n# {text}\n")
+                    elif "heading 2" in style_name or "tiêu đề 2" in style_name:
+                        md_lines.append(f"\n## {text}\n")
+                    elif "heading 3" in style_name or "tiêu đề 3" in style_name:
+                        md_lines.append(f"\n### {text}\n")
+                    elif "heading 4" in style_name or "tiêu đề 4" in style_name:
+                        md_lines.append(f"\n#### {text}\n")
+                    elif "heading 5" in style_name or "tiêu đề 5" in style_name:
+                        md_lines.append(f"\n##### {text}\n")
+                    elif "list" in style_name or "bullet" in style_name:
+                        md_lines.append(f"- {text}")
+                    else:
+                        # Heuristic heading detection based on numbering pattern (e.g. 1., 1.1., 1.1.1.)
+                        if re.match(r"^\d+\.\s+[A-ZĐÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ]", text):
+                            md_lines.append(f"\n## {text}\n")
+                        elif re.match(r"^\d+\.\d+\.\s+", text):
+                            md_lines.append(f"\n### {text}\n")
+                        elif re.match(r"^\d+\.\d+\.\d+\.\s+", text):
+                            md_lines.append(f"\n#### {text}\n")
+                        else:
+                            md_lines.append(f"{text}\n")
+                    break
 
-def fallback_xlsx_to_markdown(xlsx_path: Path) -> str:
-    """Fallback converter using openpyxl when MarkItDown fails."""
-    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
-    md_sheets = []
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        rows = list(ws.iter_rows(values_only=True))
-        if not rows:
-            continue
-        # Filter empty rows
-        valid_rows = [[str(cell if cell is not None else '').strip() for cell in r] for r in rows if any(cell is not None for cell in r)]
-        if not valid_rows:
-            continue
-        sheet_lines = [f"### Sheet: {sheet_name}\n"]
-        hdr = valid_rows[0]
-        sheet_lines.append(f"| {' | '.join(hdr)} |")
-        sheet_lines.append(f"| {' | '.join(['---'] * len(hdr))} |")
-        for r in valid_rows[1:]:
-            sheet_lines.append(f"| {' | '.join(r)} |")
-        md_sheets.append("\n".join(sheet_lines))
-    return "\n\n---\n\n".join(md_sheets).strip()
+        # Check if element is a table
+        elif element.tag.endswith('tbl'):
+            for tbl in doc.tables:
+                if tbl._tbl == element:
+                    rows_data = []
+                    for row in tbl.rows:
+                        row_cells = [c.text.replace("\n", " ").strip() for c in row.cells]
+                        raw_text_parts.extend(row_cells)
+                        rows_data.append(row_cells)
+                    if rows_data:
+                        tbl_md = table_processor.format_markdown_table(rows_data)
+                        md_lines.append(f"\n{tbl_md}\n")
+                    break
+
+    markdown_result = "\n".join(md_lines).strip()
+    raw_source = "\n".join(raw_text_parts).strip()
+    return markdown_result, raw_source
 
 class Orchestrator:
     """
-    Coordinates the 7-step document to markdown conversion workflow.
+    Coordinates the 7-step AI Knowledge Base document conversion pipeline.
     """
 
     def process_file(self, original_filename: str, source_path: Path) -> ConvertResponse:
@@ -83,9 +99,11 @@ class Orchestrator:
 
         warnings: List[str] = []
         converted_via_legacy = False
-        final_markdown = ""
+        body_markdown = ""
+        source_raw_text = ""
         pages_total = 1
         pages_ocr: List[int] = []
+        is_paginated = False
 
         try:
             # Step 1: Validate Extension
@@ -106,33 +124,43 @@ class Orchestrator:
                     ext = current_path.suffix.lower()
                 except LegacyConversionError as e:
                     warnings.append(str(e))
-                    final_markdown = f"# {original_filename}\n\n> ⚠️ **Cảnh báo chuyển đổi định dạng cũ**: {str(e)}\n\n*Để chuyển đổi tệp nhị phân cũ (.doc, .xls), vui lòng cài đặt LibreOffice hoặc chạy qua Docker.*"
+                    err_md = f"# {original_filename}\n\n> ⚠️ **Lỗi chuyển đổi định dạng cũ (.doc/.xls)**: {str(e)}"
                     return ConvertResponse(
                         filename=original_filename,
+                        document_id=metadata_extractor.generate_document_id(original_filename),
                         converted_via_legacy=False,
-                        markdown=final_markdown,
-                        pages_total=1,
-                        pages_ocr=[],
+                        markdown=err_md,
                         warnings=warnings,
-                        duration_ms=int((time.time() - start_time) * 1000),
-                        word_count=0,
-                        character_count=len(final_markdown)
+                        duration_ms=int((time.time() - start_time) * 1000)
                     )
 
-            # Step 2: DOCX / XLSX conversion via Microsoft MarkItDown with Fallback
-            if ext in {".docx", ".xlsx"}:
+            # Step 2: DOCX Structured Conversion
+            if ext == ".docx":
                 try:
-                    final_markdown = markitdown_service.convert_file(current_path)
-                except Exception as md_err:
-                    warnings.append(f"MarkItDown warning: {str(md_err)}; Chuyển sang parser dự phòng.")
-                    if ext == ".docx":
-                        final_markdown = fallback_docx_to_markdown(current_path)
-                    else:
-                        final_markdown = fallback_xlsx_to_markdown(current_path)
+                    body_markdown, source_raw_text = convert_docx_structured(current_path)
+                    if not body_markdown:
+                        body_markdown = markitdown_service.convert_file(current_path)
+                        source_raw_text = body_markdown
+                except Exception as docx_err:
+                    warnings.append(f"DOCX native parser warning: {str(docx_err)}; Using MarkItDown fallback.")
+                    body_markdown = markitdown_service.convert_file(current_path)
+                    source_raw_text = body_markdown
                 pages_total = 1
 
-            # Steps 3, 4, 5, 6: PDF Processing (Text layer + Density check + Local OCR)
+            # Step 3: Excel Spreadsheet Conversion
+            elif ext == ".xlsx":
+                try:
+                    body_markdown = table_processor.convert_excel_to_markdown(current_path)
+                    source_raw_text = body_markdown
+                except Exception as xl_err:
+                    warnings.append(f"Excel parser warning: {str(xl_err)}")
+                    body_markdown = markitdown_service.convert_file(current_path)
+                    source_raw_text = body_markdown
+                pages_total = 1
+
+            # Step 4: PDF Processing (Page by Page with Markers & OCR)
             elif ext == ".pdf":
+                is_paginated = True
                 try:
                     pdf_inspection = density_checker.inspect_pdf_pages(current_path)
                 except Exception as pdf_err:
@@ -141,12 +169,15 @@ class Orchestrator:
 
                 pages_total = max(1, len(pdf_inspection))
                 page_results: List[PageResult] = []
+                raw_parts: List[str] = []
 
                 for page_num, text_layer, needs_ocr in pdf_inspection:
+                    if text_layer:
+                        raw_parts.append(text_layer)
+
                     if needs_ocr:
                         pages_ocr.append(page_num)
                         try:
-                            # Step 5: Rasterize & run local OCR
                             img = density_checker.rasterize_page(
                                 current_path,
                                 page_number=page_num,
@@ -156,13 +187,14 @@ class Orchestrator:
                             
                             if confidence is not None and confidence < 0.6:
                                 warnings.append(
-                                    f"Trang {page_num}: Độ tin cậy OCR tương đối thấp ({int(confidence * 100)}%)."
+                                    f"Trang {page_num}: Độ tin cậy OCR ({int(confidence * 100)}%)."
                                 )
 
+                            raw_parts.append(ocr_text)
                             page_results.append(
                                 PageResult(
                                     page_number=page_num,
-                                    text=ocr_text,
+                                    text=f"> [Extracted from image]\n{ocr_text}" if ocr_text else "*(Trang quét ảnh trống)*",
                                     is_ocr=True,
                                     confidence=confidence,
                                     char_count=len(ocr_text)
@@ -179,7 +211,6 @@ class Orchestrator:
                                 )
                             )
                     else:
-                        # Good text layer: keep original text
                         page_results.append(
                             PageResult(
                                 page_number=page_num,
@@ -189,35 +220,99 @@ class Orchestrator:
                             )
                         )
 
-                # Step 6: Merge pages into single markdown document
-                final_markdown = markdown_merger.merge_pages(page_results)
+                # Merge pages with explicit source_page markers
+                body_parts: List[str] = []
+                for p in page_results:
+                    body_parts.append(f"<!-- source_page: {p.page_number} -->\n\n{p.text.strip()}")
+                body_markdown = "\n\n---\n\n".join(body_parts)
+                source_raw_text = "\n".join(raw_parts)
 
             else:
-                # Direct fallback via MarkItDown
-                try:
-                    final_markdown = markitdown_service.convert_file(current_path)
-                except Exception:
-                    final_markdown = current_path.read_text(encoding="utf-8", errors="ignore")
+                body_markdown = markitdown_service.convert_file(current_path)
+                source_raw_text = body_markdown
 
-            # Calculate stats
+            # Step 5: Normalize Encoding (Unicode NFC, remove NULL bytes, BOM)
+            body_markdown = structure_normalizer.normalize_encoding(body_markdown)
+            source_raw_text = structure_normalizer.normalize_encoding(source_raw_text)
+
+            # Step 6: Process Headings & Inject Stable Section IDs (<a id="..."></a>)
+            normalized_body, sections = structure_normalizer.process_headings_and_sections(body_markdown)
+            normalized_body = structure_normalizer.clean_markdown_boundaries(normalized_body)
+
+            # Step 7: Build Metadata & YAML Front Matter
+            doc_meta = metadata_extractor.build_metadata(
+                filename=original_filename,
+                source_path=source_path,
+                raw_markdown=normalized_body,
+                source_text=source_raw_text,
+                page_count=pages_total
+            )
+            yaml_header = metadata_extractor.generate_yaml_front_matter(doc_meta)
+
+            final_markdown = f"{yaml_header}\n{normalized_body}"
+
+            # Step 8: Automated Validation
+            val_result = validator.validate(final_markdown, doc_meta, is_paginated=is_paginated)
+            if val_result.warnings:
+                warnings.extend(val_result.warnings)
+
+            # Stats
             word_count, character_count = markdown_merger.calculate_stats(final_markdown)
             duration_ms = int((time.time() - start_time) * 1000)
 
             return ConvertResponse(
                 filename=original_filename,
+                document_id=doc_meta.document_id,
                 converted_via_legacy=converted_via_legacy,
                 markdown=final_markdown,
+                metadata=doc_meta,
+                sections=sections,
+                validation=val_result,
                 pages_total=pages_total,
                 pages_ocr=pages_ocr,
-                warnings=warnings,
+                warnings=list(set(warnings)),
                 duration_ms=duration_ms,
                 word_count=word_count,
-                character_count=character_count
+                character_count=character_count,
+                source_sha256=doc_meta.source_sha256
             )
 
         finally:
-            # Step 7: Clean up temporary files in storage
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def process_knowledge_base(self, files_data: List[Tuple[str, Path]], kb_name: str = "VNPT-AI-Knowledge-Base") -> KnowledgeBaseResponse:
+        """
+        Processes a batch of files and constructs the complete Knowledge Base bundle:
+        - Individual converted documents
+        - 00_Master_Index.md
+        - manifest.json
+        - conversion_report.md
+        """
+        converted_docs: List[ConvertResponse] = []
+        for filename, temp_path in files_data:
+            res = self.process_file(original_filename=filename, source_path=temp_path)
+            converted_docs.append(res)
+
+        master_index = index_generator.generate_master_index(converted_docs, kb_name=kb_name)
+        manifest = index_generator.generate_manifest(converted_docs, kb_name=kb_name)
+        report = index_generator.generate_conversion_report(converted_docs)
+
+        total_sections = sum(len(d.sections) for d in converted_docs)
+        overall_status = "PASS"
+        if any(d.validation and d.validation.status == "FAIL" for d in converted_docs):
+            overall_status = "FAIL"
+        elif any(d.validation and d.validation.status == "WARNING" for d in converted_docs):
+            overall_status = "WARNING"
+
+        return KnowledgeBaseResponse(
+            master_index_md=master_index,
+            manifest_json=manifest,
+            conversion_report_md=report,
+            documents=converted_docs,
+            total_documents=len(converted_docs),
+            total_sections=total_sections,
+            overall_status=overall_status
+        )
 
 orchestrator = Orchestrator()

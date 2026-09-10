@@ -1,17 +1,22 @@
-import shutil
+import io
+import json
+import zipfile
 import tempfile
+import shutil
 from pathlib import Path
+from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
+
 from ..config import settings
-from ..models import ConvertResponse, HealthResponse
+from ..models import ConvertResponse, HealthResponse, KnowledgeBaseResponse
 from ..pipeline.orchestrator import orchestrator, ConversionPipelineError
 
 router = APIRouter(prefix="/api", tags=["Conversion"])
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
-    libreoffice_available = shutil.which(settings.resolve_libreoffice_bin()) is not None or Path(settings.resolve_libreoffice_bin()).exists()
+    libreoffice_available = settings.find_libreoffice_bin() is not None
     tesseract_available = shutil.which(settings.resolve_tesseract_bin()) is not None or Path(settings.resolve_tesseract_bin()).exists()
 
     return HealthResponse(
@@ -21,11 +26,6 @@ async def health_check():
         tesseract_available=tesseract_available,
         density_threshold=settings.MIN_DENSITY_CHARS_PER_PAGE
     )
-
-from typing import List
-import zipfile
-import io
-from fastapi.responses import PlainTextResponse, StreamingResponse
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_file_endpoint(file: UploadFile = File(...)):
@@ -38,12 +38,10 @@ async def convert_file_endpoint(file: UploadFile = File(...)):
             detail=f"Unsupported file format '{ext}'. Allowed formats: {', '.join(settings.ALLOWED_EXTENSIONS)}"
         )
 
-    # Save uploaded file to temporary path
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     temp_path = Path(temp_file.name)
 
     try:
-        # Check file size limit while writing
         max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
         size = 0
 
@@ -58,7 +56,6 @@ async def convert_file_endpoint(file: UploadFile = File(...)):
         temp_file.flush()
         temp_file.close()
 
-        # Run conversion through the orchestrator
         response = orchestrator.process_file(
             original_filename=filename,
             source_path=temp_path
@@ -79,6 +76,50 @@ async def convert_file_endpoint(file: UploadFile = File(...)):
         if temp_path.exists():
             temp_path.unlink(missing_ok=True)
 
+@router.post("/convert-knowledge-base", response_model=KnowledgeBaseResponse)
+async def convert_knowledge_base_endpoint(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No files provided for Knowledge Base conversion."
+        )
+
+    saved_files: List[tuple[str, Path]] = []
+    temp_files_to_clean: List[Path] = []
+
+    try:
+        for file in files:
+            filename = file.filename or "document.txt"
+            ext = Path(filename).suffix.lower()
+
+            if ext not in settings.ALLOWED_EXTENSIONS:
+                continue
+
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+            temp_path = Path(temp_file.name)
+            temp_files_to_clean.append(temp_path)
+
+            while chunk := await file.read(1024 * 1024):
+                temp_file.write(chunk)
+            temp_file.flush()
+            temp_file.close()
+
+            saved_files.append((filename, temp_path))
+
+        if not saved_files:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="None of the uploaded files have supported extensions."
+            )
+
+        kb_result = orchestrator.process_knowledge_base(saved_files)
+        return kb_result
+
+    finally:
+        for p in temp_files_to_clean:
+            if p.exists():
+                p.unlink(missing_ok=True)
+
 @router.post("/convert-batch", response_model=List[ConvertResponse])
 async def convert_batch_endpoint(files: List[UploadFile] = File(...)):
     if not files:
@@ -88,26 +129,11 @@ async def convert_batch_endpoint(files: List[UploadFile] = File(...)):
         )
 
     results: List[ConvertResponse] = []
-
     for file in files:
         filename = file.filename or "document.txt"
         ext = Path(filename).suffix.lower()
 
         if ext not in settings.ALLOWED_EXTENSIONS:
-            # Skip or record error response
-            results.append(
-                ConvertResponse(
-                    filename=filename,
-                    converted_via_legacy=False,
-                    markdown=f"<!-- Error: Định dạng {ext} không được hỗ trợ -->",
-                    pages_total=0,
-                    pages_ocr=[],
-                    warnings=[f"Định dạng {ext} không nằm trong danh sách hỗ trợ."],
-                    duration_ms=0,
-                    word_count=0,
-                    character_count=0
-                )
-            )
             continue
 
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
@@ -124,20 +150,6 @@ async def convert_batch_endpoint(files: List[UploadFile] = File(...)):
                 source_path=temp_path
             )
             results.append(res)
-        except Exception as err:
-            results.append(
-                ConvertResponse(
-                    filename=filename,
-                    converted_via_legacy=False,
-                    markdown=f"<!-- Lỗi khi xử lý file: {str(err)} -->",
-                    pages_total=0,
-                    pages_ocr=[],
-                    warnings=[f"Lỗi: {str(err)}"],
-                    duration_ms=0,
-                    word_count=0,
-                    character_count=0
-                )
-            )
         finally:
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)
@@ -153,7 +165,6 @@ async def convert_batch_zip_endpoint(files: List[UploadFile] = File(...)):
         )
 
     zip_buffer = io.BytesIO()
-
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for file in files:
             filename = file.filename or "document.txt"
@@ -175,13 +186,8 @@ async def convert_batch_zip_endpoint(files: List[UploadFile] = File(...)):
                     original_filename=filename,
                     source_path=temp_path
                 )
-                
                 base_name = Path(filename).stem
-                md_filename = f"{base_name}.md"
-                zip_file.writestr(md_filename, res.markdown.encode("utf-8"))
-            except Exception as err:
-                base_name = Path(filename).stem
-                zip_file.writestr(f"{base_name}_error.txt", f"Lỗi: {str(err)}")
+                zip_file.writestr(f"{base_name}.md", res.markdown.encode("utf-8"))
             finally:
                 if temp_path.exists():
                     temp_path.unlink(missing_ok=True)
@@ -192,3 +198,71 @@ async def convert_batch_zip_endpoint(files: List[UploadFile] = File(...)):
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=converted_markdown_batch.zip"}
     )
+
+@router.post("/convert-knowledge-base/zip")
+async def convert_knowledge_base_zip_endpoint(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No files provided for ZIP generation."
+        )
+
+    saved_files: List[tuple[str, Path, bytes]] = []
+    temp_files_to_clean: List[Path] = []
+
+    try:
+        for file in files:
+            filename = file.filename or "document.txt"
+            ext = Path(filename).suffix.lower()
+
+            if ext not in settings.ALLOWED_EXTENSIONS:
+                continue
+
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+            temp_path = Path(temp_file.name)
+            temp_files_to_clean.append(temp_path)
+
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.flush()
+            temp_file.close()
+
+            saved_files.append((filename, temp_path, content))
+
+        if not saved_files:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="None of the uploaded files have supported extensions."
+            )
+
+        files_data = [(fn, p) for fn, p, _ in saved_files]
+        kb_result = orchestrator.process_knowledge_base(files_data)
+
+        # Build ZIP with exact AI Knowledge Base folder layout
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            # 1. Root files
+            zf.writestr("00_Master_Index.md", kb_result.master_index_md.encode("utf-8"))
+            zf.writestr("manifest.json", json.dumps(kb_result.manifest_json, ensure_ascii=False, indent=2).encode("utf-8"))
+            zf.writestr("conversion_report.md", kb_result.conversion_report_md.encode("utf-8"))
+
+            # 2. Individual documents
+            for doc in kb_result.documents:
+                base_name = Path(doc.filename).stem
+                zf.writestr(f"documents/{base_name}.md", doc.markdown.encode("utf-8"))
+
+            # 3. Source backup
+            for fn, _, content in saved_files:
+                zf.writestr(f"source/{fn}", content)
+
+        zip_buffer.seek(0)
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={"Content-Disposition": "attachment; filename=AI_Knowledge_Base_Package.zip"}
+        )
+
+    finally:
+        for p in temp_files_to_clean:
+            if p.exists():
+                p.unlink(missing_ok=True)
