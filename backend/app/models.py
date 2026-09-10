@@ -46,6 +46,7 @@ class ValidationCheck(BaseModel):
 
 class ValidationResult(BaseModel):
     status: str = "PASS"  # PASS, WARNING, FAIL
+    is_safe_for_ai: bool = True  # True if passes quality gate, False if failed/quarantine
     checks: List[ValidationCheck] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
@@ -67,13 +68,19 @@ class ConvertResponse(BaseModel):
     source_sha256: str = ""
 
 class KnowledgeBaseResponse(BaseModel):
-    master_index_md: str
+    is_single_mode: bool = False
+    master_index_md: str = ""
     manifest_json: Dict[str, Any]
     conversion_report_md: str
-    documents: List[ConvertResponse] = Field(default_factory=list)
+    readme_txt: str = ""
+    upload_to_ai_documents: List[ConvertResponse] = Field(default_factory=list)
+    failed_documents: List[ConvertResponse] = Field(default_factory=list)
     total_documents: int = 0
-    total_sections: int = 0
+    ready_count: int = 0
+    warning_count: int = 0
+    failed_count: int = 0
     overall_status: str = "PASS"
+    documents: List[ConvertResponse] = Field(default_factory=list)
 
 class HealthResponse(BaseModel):
     status: str

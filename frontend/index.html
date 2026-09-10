@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Doc2MD Pro - AI Knowledge Base & RAG Converter</title>
-  <meta name="description" content="Chuyển đổi tài liệu PDF, DOCX, DOC, XLSX, XLS sang Markdown chuẩn cho AI Knowledge Base, ChatGPT Knowledge và RAG." />
+  <title>Doc2MD Pro - AI Knowledge Package Builder</title>
+  <meta name="description" content="Chuyển đổi tài liệu PDF, DOCX, DOC, XLSX, XLS thành gói Knowledge Package dùng trực tiếp cho AI và ChatGPT." />
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,7 +20,7 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
-  <link rel="stylesheet" href="/static/style.css?v=3.0">
+  <link rel="stylesheet" href="/static/style.css?v=3.5">
 </head>
 <body>
   <div class="app-bg-mesh"></div>
@@ -33,17 +33,17 @@
     <header class="app-header">
       <div class="brand-section">
         <div class="brand-icon-wrapper">
-          <i data-lucide="brain-circuit"></i>
+          <i data-lucide="package-check"></i>
         </div>
         <div class="brand-text">
-          <h1>Doc2MD Pro <span class="badge badge-accent">AI Knowledge Base</span></h1>
-          <p>Chuyển đổi tài liệu sang Markdown chuẩn AI Knowledge Base, RAG & ChatGPT</p>
+          <h1>Doc2MD Pro <span class="badge badge-accent">Knowledge Package Builder</span></h1>
+          <p>Tạo gói Knowledge Package chuẩn hóa nạp trực tiếp vào ChatGPT / RAG</p>
         </div>
       </div>
 
       <div class="header-actions">
         <button id="batchDownloadBtnTop" class="btn btn-primary" style="display: none;">
-          <i data-lucide="archive"></i> Tải Gói Knowledge Base (.zip) <span id="batchCountBadge" class="badge badge-accent" style="margin-left: 4px;">0</span>
+          <i data-lucide="archive"></i> Tải Gói Knowledge Package (.zip) <span id="batchCountBadge" class="badge badge-accent" style="margin-left: 4px;">0</span>
         </button>
 
         <div id="systemHealth" class="health-badge" title="Trạng thái hệ thống">
@@ -61,13 +61,13 @@
     <div class="workspace-grid">
       <!-- Sidebar Column -->
       <aside class="sidebar-column">
-        <!-- Dropzone -->
+        <!-- Dropzone / Build Action -->
         <div id="dropzone" class="dropzone-card">
           <div class="dropzone-icon">
             <i data-lucide="upload-cloud"></i>
           </div>
-          <h3>Kéo thả tài liệu vào đây</h3>
-          <p>Tự động tạo <strong>00_Master_Index.md</strong>, <strong>manifest.json</strong> & YAML Metadata</p>
+          <h3>Chọn hoặc Kéo thả tệp nguồn</h3>
+          <p>Hỗ trợ 1 hoặc nhiều tài liệu (Tự động tạo <code>upload_to_ai/</code> & <code>00_Master_Index.md</code>)</p>
           
           <div class="format-badges">
             <span class="badge badge-red">PDF (Auto OCR)</span>
@@ -75,15 +75,27 @@
             <span class="badge badge-green">XLSX / XLS</span>
           </div>
 
-          <button id="selectFileBtn" type="button" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">
-            <i data-lucide="folder-open"></i> Chọn tài liệu từ máy
+          <button id="selectFileBtn" type="button" class="btn btn-build-knowledge" style="margin-top: 1rem; width: 100%;">
+            <i data-lucide="sparkles"></i> BUILD KNOWLEDGE
           </button>
+        </div>
+
+        <!-- Summary Banner (Hidden until build) -->
+        <div id="summaryBanner" class="summary-banner" style="display: none;">
+          <div class="summary-stats">
+            <span id="readyBadge" class="badge badge-green">🚀 0 Sẵn sàng nạp AI</span>
+            <span id="warnBadge" class="badge badge-yellow" style="display: none;">⚠️ 0 Cảnh báo</span>
+            <span id="failBadge" class="badge badge-red" style="display: none;">❌ 0 Cần kiểm tra</span>
+          </div>
+          <div class="summary-note">
+            💡 <em>Mọi file trong thư mục <strong>upload_to_ai/</strong> đã đạt chuẩn để nạp trực tiếp cho AI.</em>
+          </div>
         </div>
 
         <!-- File Queue Panel -->
         <div class="glass-card file-queue-card">
           <div class="panel-header">
-            <h4><i data-lucide="layers"></i> Danh Sách Tài Liệu (<span id="fileCountText">0</span>)</h4>
+            <h4><i data-lucide="folder-tree"></i> Cấu Trúc Knowledge Package</h4>
             <div style="display: flex; gap: 0.35rem;">
               <button id="clearAllBtn" class="btn btn-secondary btn-sm" title="Xóa tất cả" style="display: none; padding: 0.25rem 0.55rem; font-size: 0.75rem;">
                 <i data-lucide="trash-2"></i> Xóa hết
@@ -94,8 +106,8 @@
           <div id="fileQueueList" class="file-queue-list">
             <div class="queue-empty">
               <i data-lucide="files" opacity="0.4"></i>
-              <p>Chưa có tệp nào trong danh sách</p>
-              <span>Kéo thả hoặc bấm nút trên để bắt đầu</span>
+              <p>Chưa có tài liệu nào</p>
+              <span>Kéo thả hoặc bấm nút <strong>BUILD KNOWLEDGE</strong> ở trên</span>
             </div>
           </div>
         </div>
@@ -103,9 +115,13 @@
         <!-- Conversion Details for Active File -->
         <div id="metaCard" class="glass-card meta-card" style="display: none;">
           <div class="panel-header">
-            <h4><i data-lucide="info"></i> Metadata & Kiểm Định</h4>
+            <h4><i data-lucide="info"></i> Metadata & Quality Gate</h4>
           </div>
           <div class="meta-content">
+            <div class="meta-row">
+              <span>Thư mục đích:</span>
+              <strong id="metaTargetFolder" style="color: #38bdf8;">upload_to_ai/</strong>
+            </div>
             <div class="meta-row">
               <span>Mã tài liệu:</span>
               <strong id="metaDocId">-</strong>
@@ -115,7 +131,7 @@
               <span id="metaTitle" style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
             </div>
             <div class="meta-row">
-              <span>Kiểm định chất lượng:</span>
+              <span>Quality Gate:</span>
               <span id="metaValidation" class="badge badge-green">PASS</span>
             </div>
             <div class="meta-row">
@@ -159,7 +175,7 @@
                 <i data-lucide="download"></i> Tải file này
               </button>
               <button id="batchDownloadBtn" class="btn btn-primary" disabled>
-                <i data-lucide="archive"></i> Tải Gói Knowledge Base (.zip)
+                <i data-lucide="archive"></i> Tải Gói Knowledge Package (.zip)
               </button>
             </div>
           </div>
@@ -200,13 +216,13 @@
   <!-- Loading Overlay -->
   <div id="loadingOverlay" class="loading-overlay" style="display: none;">
     <div class="loading-spinner"></div>
-    <h3 id="loadingTitle">Đang chuyển đổi và sinh Knowledge Base...</h3>
-    <p id="loadingDesc">Đang chuẩn hóa Unicode NFC, trích xuất Heading, tạo 00_Master_Index.md và kiểm định</p>
+    <h3 id="loadingTitle">Đang BUILD KNOWLEDGE...</h3>
+    <p id="loadingDesc">Đang chuẩn hóa Unicode NFC, trích xuất cấu trúc, tạo thư mục upload_to_ai/ và kiểm tra Quality Gate</p>
   </div>
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/static/app.js?v=3.0"></script>
+  <script src="/static/app.js?v=3.5"></script>
 </body>
 </html>

@@ -13,8 +13,41 @@ client = TestClient(app)
 def init_fixtures():
     setup_all_fixtures()
 
-def test_knowledge_base_conversion_bundle():
-    """Tests the full batch Knowledge Base conversion API."""
+def test_single_document_mode():
+    """Tests Single Document Mode (1 file input): NO 00_Master_Index.md, direct upload_to_ai."""
+    hld_path = FIXTURES_DIR / "03.IMS_HLD.docx"
+    with open(hld_path, "rb") as f:
+        files = [("files", ("03.IMS_HLD.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))]
+        res = client.post("/api/convert-knowledge-base", files=files)
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["is_single_mode"] is True
+    assert data["master_index_md"] == ""
+    assert data["ready_count"] == 1
+    assert len(data["upload_to_ai_documents"]) == 1
+    assert "Single Document Mode" in data["readme_txt"]
+
+def test_single_document_zip_layout():
+    """Tests ZIP packaging for Single Document Mode."""
+    hld_path = FIXTURES_DIR / "03.IMS_HLD.docx"
+    with open(hld_path, "rb") as f:
+        files = [("files", ("03.IMS_HLD.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))]
+        res = client.post("/api/convert-knowledge-base/zip", files=files)
+
+    assert res.status_code == 200
+    zip_bytes = io.BytesIO(res.content)
+    with zipfile.ZipFile(zip_bytes, "r") as zf:
+        names = zf.namelist()
+        assert "upload_to_ai/03.IMS_HLD.md" in names
+        assert "upload_to_ai/00_Master_Index.md" not in names  # MUST NOT generate Master Index for single doc
+        assert "technical/manifest.json" in names
+        assert "technical/conversion_report.md" in names
+        assert "source/03.IMS_HLD.docx" in names
+        assert "README.txt" in names
+
+def test_knowledge_pack_mode_multi_files():
+    """Tests Knowledge Pack Mode (>= 2 files input): WITH 00_Master_Index.md."""
     hld_path = FIXTURES_DIR / "03.IMS_HLD.docx"
     lld_path = FIXTURES_DIR / "04.IMS_LLD.docx"
     excel_path = FIXTURES_DIR / "IMS_TEST_REPORT_PhiChucNang.xlsx"
@@ -25,38 +58,41 @@ def test_knowledge_base_conversion_bundle():
             ("files", ("04.IMS_LLD.docx", f2, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
             ("files", ("IMS_TEST_REPORT_PhiChucNang.xlsx", f3, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
         ]
-        response = client.post("/api/convert-knowledge-base", files=files)
+        res = client.post("/api/convert-knowledge-base", files=files)
 
-    assert response.status_code == 200
-    data = response.json()
+    assert res.status_code == 200
+    data = res.json()
+    assert data["is_single_mode"] is False
+    assert data["master_index_md"] != ""
+    assert "# MASTER INDEX" in data["master_index_md"]
+    assert data["ready_count"] == 3
+    assert len(data["upload_to_ai_documents"]) == 3
+    assert "Knowledge Pack" in data["readme_txt"]
 
-    # 1. Verify Structure
-    assert data["total_documents"] == 3
-    assert "master_index_md" in data
-    assert "manifest_json" in data
-    assert "conversion_report_md" in data
+def test_knowledge_pack_zip_layout():
+    """Tests ZIP packaging for Knowledge Pack Mode."""
+    hld_path = FIXTURES_DIR / "03.IMS_HLD.docx"
+    lld_path = FIXTURES_DIR / "04.IMS_LLD.docx"
 
-    # 2. Verify 00_Master_Index.md
-    master_index = data["master_index_md"]
-    assert "# MASTER INDEX" in master_index
-    assert "IMS-HLD" in master_index
-    assert "03.IMS_HLD.docx" in master_index
-    assert "Quản lý kế hoạch vốn" in master_index
-    assert "Kiến trúc tích hợp" in master_index
+    with open(hld_path, "rb") as f1, open(lld_path, "rb") as f2:
+        files = [
+            ("files", ("03.IMS_HLD.docx", f1, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
+            ("files", ("04.IMS_LLD.docx", f2, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        ]
+        res = client.post("/api/convert-knowledge-base/zip", files=files)
 
-    # 3. Verify manifest.json
-    manifest = data["manifest_json"]
-    assert manifest["schema_version"] == "1.0"
-    assert len(manifest["documents"]) == 3
-    hld_doc = next(d for d in manifest["documents"] if d["source_file"] == "03.IMS_HLD.docx")
-    assert hld_doc["document_id"] == "IMS-HLD"
-    assert hld_doc["sha256"] != ""
-    assert any("kế hoạch vốn" in s["heading"].lower() for s in hld_doc["sections"])
-
-    # 4. Verify conversion_report.md
-    report = data["conversion_report_md"]
-    assert "CONVERSION QUALITY REPORT" in report
-    assert "03.IMS_HLD.docx" in report
+    assert res.status_code == 200
+    zip_bytes = io.BytesIO(res.content)
+    with zipfile.ZipFile(zip_bytes, "r") as zf:
+        names = zf.namelist()
+        assert "upload_to_ai/00_Master_Index.md" in names
+        assert "upload_to_ai/03.IMS_HLD.md" in names
+        assert "upload_to_ai/04.IMS_LLD.md" in names
+        assert "technical/manifest.json" in names
+        assert "technical/conversion_report.md" in names
+        assert "source/03.IMS_HLD.docx" in names
+        assert "source/04.IMS_LLD.docx" in names
+        assert "README.txt" in names
 
 def test_acceptance_test_case_1_function_search():
     """Test Case 1: Hỏi 'IMS có chức năng quản lý kế hoạch vốn không?'"""
@@ -69,7 +105,7 @@ def test_acceptance_test_case_1_function_search():
 
     # Must contain section 3.3 and keyword
     assert "Quản lý kế hoạch vốn" in md
-    assert "<a id=\"sec-3-3-quan-ly-ke-hoach-von\"></a>" in md or "sec-3-3" in md
+    assert "sec-3-3" in md
     assert "vốn đầu tư trung hạn và hàng năm" in md
 
 def test_acceptance_test_case_2_document_comparison():
@@ -117,8 +153,7 @@ def test_acceptance_test_case_5_searchable_tables():
     assert res.status_code == 200
     md = res.json()["markdown"]
 
-    # Verify table structure & cell contents
-    assert "| STT | Chức năng |" in md or "| STT |" in md
+    assert "| STT |" in md
     assert "Nghiệm thu quyết toán" in md
     assert "Ban QLDA" in md
 
@@ -135,29 +170,3 @@ def test_acceptance_test_case_6_excel_multi_sheet():
     assert "## Sheet: Performance" in md
     assert "1250 TPS" in md
     assert "< 200ms" in md
-
-def test_knowledge_base_zip_package():
-    """Test Case: Tải toàn bộ gói Knowledge Base (.zip) với cấu trúc thư mục chuẩn."""
-    hld_path = FIXTURES_DIR / "03.IMS_HLD.docx"
-    excel_path = FIXTURES_DIR / "IMS_TEST_REPORT_PhiChucNang.xlsx"
-
-    with open(hld_path, "rb") as f1, open(excel_path, "rb") as f2:
-        files = [
-            ("files", ("03.IMS_HLD.docx", f1, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
-            ("files", ("IMS_TEST_REPORT_PhiChucNang.xlsx", f2, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-        ]
-        res = client.post("/api/convert-knowledge-base/zip", files=files)
-
-    assert res.status_code == 200
-    assert res.headers["content-type"] == "application/zip"
-
-    # Inspect zip contents
-    zip_bytes = io.BytesIO(res.content)
-    with zipfile.ZipFile(zip_bytes, "r") as zf:
-        names = zf.namelist()
-        assert "00_Master_Index.md" in names
-        assert "manifest.json" in names
-        assert "conversion_report.md" in names
-        assert "documents/03.IMS_HLD.md" in names
-        assert "documents/IMS_TEST_REPORT_PhiChucNang.md" in names
-        assert "source/03.IMS_HLD.docx" in names

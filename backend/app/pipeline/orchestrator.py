@@ -36,7 +36,6 @@ def convert_docx_structured(docx_path: Path) -> Tuple[str, str]:
     for element in doc.element.body:
         # Check if element is a paragraph
         if element.tag.endswith('p'):
-            # Find corresponding paragraph object
             for para in doc.paragraphs:
                 if para._p == element:
                     text = para.text.strip()
@@ -58,7 +57,7 @@ def convert_docx_structured(docx_path: Path) -> Tuple[str, str]:
                     elif "list" in style_name or "bullet" in style_name:
                         md_lines.append(f"- {text}")
                     else:
-                        # Heuristic heading detection based on numbering pattern (e.g. 1., 1.1., 1.1.1.)
+                        # Heuristic heading detection based on numbering pattern
                         if re.match(r"^\d+\.\s+[A-ZĐÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ]", text):
                             md_lines.append(f"\n## {text}\n")
                         elif re.match(r"^\d+\.\d+\.\s+", text):
@@ -104,6 +103,7 @@ class Orchestrator:
         pages_total = 1
         pages_ocr: List[int] = []
         is_paginated = False
+        is_pure_ocr = False
 
         try:
             # Step 1: Validate Extension
@@ -220,6 +220,9 @@ class Orchestrator:
                             )
                         )
 
+                if len(pages_ocr) == pages_total:
+                    is_pure_ocr = True
+
                 # Merge pages with explicit source_page markers
                 body_parts: List[str] = []
                 for p in page_results:
@@ -251,8 +254,8 @@ class Orchestrator:
 
             final_markdown = f"{yaml_header}\n{normalized_body}"
 
-            # Step 8: Automated Validation
-            val_result = validator.validate(final_markdown, doc_meta, is_paginated=is_paginated)
+            # Step 8: Quality Gate Automated Validation
+            val_result = validator.validate(final_markdown, doc_meta, is_paginated=is_paginated, is_ocr=is_pure_ocr)
             if val_result.warnings:
                 warnings.extend(val_result.warnings)
 
@@ -283,36 +286,59 @@ class Orchestrator:
 
     def process_knowledge_base(self, files_data: List[Tuple[str, Path]], kb_name: str = "VNPT-AI-Knowledge-Base") -> KnowledgeBaseResponse:
         """
-        Processes a batch of files and constructs the complete Knowledge Base bundle:
-        - Individual converted documents
-        - 00_Master_Index.md
-        - manifest.json
-        - conversion_report.md
+        Builds the complete Knowledge Package:
+        - Single Document Mode: 1 file -> upload_to_ai/<doc>.md (NO 00_Master_Index.md)
+        - Knowledge Pack Mode: >= 2 files -> upload_to_ai/00_Master_Index.md, upload_to_ai/*.md
+        - Separates ready documents from failed documents via Quality Gate
+        - Generates technical/manifest.json, technical/conversion_report.md, README.txt
         """
-        converted_docs: List[ConvertResponse] = []
+        all_converted: List[ConvertResponse] = []
         for filename, temp_path in files_data:
             res = self.process_file(original_filename=filename, source_path=temp_path)
-            converted_docs.append(res)
+            all_converted.append(res)
 
-        master_index = index_generator.generate_master_index(converted_docs, kb_name=kb_name)
-        manifest = index_generator.generate_manifest(converted_docs, kb_name=kb_name)
-        report = index_generator.generate_conversion_report(converted_docs)
+        ready_docs = [d for d in all_converted if d.validation and d.validation.is_safe_for_ai]
+        failed_docs = [d for d in all_converted if d.validation and not d.validation.is_safe_for_ai]
 
-        total_sections = sum(len(d.sections) for d in converted_docs)
+        is_single_mode = (len(ready_docs) == 1)
+
+        # 00_Master_Index.md: ONLY generated when >= 2 ready documents
+        if len(ready_docs) >= 2:
+            master_index = index_generator.generate_master_index(ready_docs, kb_name=kb_name)
+        else:
+            master_index = ""
+
+        manifest = index_generator.generate_manifest(ready_docs, failed_documents=failed_docs, kb_name=kb_name)
+        report = index_generator.generate_conversion_report(ready_docs, failed_documents=failed_docs)
+        readme = index_generator.generate_readme_txt(
+            is_single_mode=is_single_mode,
+            total_count=len(all_converted),
+            ready_count=len(ready_docs),
+            failed_count=len(failed_docs)
+        )
+
         overall_status = "PASS"
-        if any(d.validation and d.validation.status == "FAIL" for d in converted_docs):
+        if failed_docs:
             overall_status = "FAIL"
-        elif any(d.validation and d.validation.status == "WARNING" for d in converted_docs):
+        elif any(d.validation and d.validation.status == "WARNING" for d in ready_docs):
             overall_status = "WARNING"
 
+        warning_count = sum(1 for d in ready_docs if d.validation and d.validation.status == "WARNING")
+
         return KnowledgeBaseResponse(
+            is_single_mode=is_single_mode,
             master_index_md=master_index,
             manifest_json=manifest,
             conversion_report_md=report,
-            documents=converted_docs,
-            total_documents=len(converted_docs),
-            total_sections=total_sections,
-            overall_status=overall_status
+            readme_txt=readme,
+            upload_to_ai_documents=ready_docs,
+            failed_documents=failed_docs,
+            total_documents=len(all_converted),
+            ready_count=len(ready_docs),
+            warning_count=warning_count,
+            failed_count=len(failed_docs),
+            overall_status=overall_status,
+            documents=all_converted
         )
 
 orchestrator = Orchestrator()
