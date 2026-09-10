@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  md-converter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: md-converter-webapp
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - OCR_DENSITY_THRESHOLD=50
+      - OCR_RASTERIZE_DPI=200
+      - TESSERACT_LANG=vie+eng
+      - TESSERACT_BIN=/usr/bin/tesseract
+      - MAX_FILE_SIZE_MB=50
+    volumes:
+      - ./backend/storage/tmp:/app/backend/storage/tmp
+    restart: unless-stopped

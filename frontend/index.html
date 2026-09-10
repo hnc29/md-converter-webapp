@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doc2MD Pro - Chuyển Đổi Hàng Loạt PDF, DOC, XLS Sang Markdown</title>
+  <meta name="description" content="Chuyển đổi đồng thời nhiều tài liệu PDF, Word (.doc, .docx), Excel (.xls, .xlsx) sang Markdown với Microsoft MarkItDown và OCR cục bộ." />
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Highlight.js & Marked & JSZip CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <link rel="stylesheet" href="/static/style.css?v=2.2">
+</head>
+<body>
+  <div class="app-bg-mesh"></div>
+  
+  <!-- Hidden multiple file input placed outside dropzone -->
+  <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.xls,.xlsx" style="position: absolute; left: -9999px;" />
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="brand-icon-wrapper">
+          <i data-lucide="file-text"></i>
+        </div>
+        <div class="brand-text">
+          <h1>Doc2MD Pro <span class="badge badge-accent">Batch Converter</span></h1>
+          <p>Chuyển đổi hàng loạt tài liệu PDF, DOC/DOCX, XLS/XLSX sang Markdown chuẩn</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="batchDownloadBtnTop" class="btn btn-primary" style="display: none;">
+          <i data-lucide="archive"></i> Tải Tất Cả (.zip) <span id="batchCountBadge" class="badge badge-accent" style="margin-left: 4px;">0</span>
+        </button>
+
+        <div id="systemHealth" class="health-badge" title="Trạng thái hệ thống OCR & LibreOffice">
+          <span class="status-dot"></span>
+          <span id="healthText">Đang kiểm tra hệ thống...</span>
+        </div>
+
+        <button id="themeToggle" class="btn btn-secondary btn-icon" title="Chuyển đổi chế độ Sáng/Tối">
+          <i data-lucide="sun" id="themeIcon"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="workspace-grid">
+      <!-- Sidebar Column -->
+      <aside class="sidebar-column">
+        <!-- Dropzone -->
+        <div id="dropzone" class="dropzone-card">
+          <div class="dropzone-icon">
+            <i data-lucide="upload-cloud"></i>
+          </div>
+          <h3>Kéo thả nhiều tệp vào đây</h3>
+          <p>Hỗ trợ chọn hoặc kéo thả <strong>nhiều file cùng lúc</strong></p>
+          
+          <div class="format-badges">
+            <span class="badge badge-red">PDF (Auto OCR)</span>
+            <span class="badge badge-blue">DOCX / DOC</span>
+            <span class="badge badge-green">XLSX / XLS</span>
+          </div>
+
+          <button id="selectFileBtn" type="button" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">
+            <i data-lucide="folder-open"></i> Chọn nhiều tệp từ máy
+          </button>
+        </div>
+
+        <!-- File Queue Panel -->
+        <div class="glass-card file-queue-card">
+          <div class="panel-header">
+            <h4><i data-lucide="layers"></i> Danh Sách Tệp (<span id="fileCountText">0</span>)</h4>
+            <div style="display: flex; gap: 0.35rem;">
+              <button id="clearAllBtn" class="btn btn-secondary btn-sm" title="Xóa tất cả tệp khỏi danh sách" style="display: none; padding: 0.25rem 0.55rem; font-size: 0.75rem;">
+                <i data-lucide="trash-2"></i> Xóa hết
+              </button>
+            </div>
+          </div>
+          
+          <div id="fileQueueList" class="file-queue-list">
+            <div class="queue-empty">
+              <i data-lucide="files" opacity="0.4"></i>
+              <p>Chưa có tệp nào trong danh sách</p>
+              <span>Kéo thả hoặc bấm nút trên để chọn nhiều tệp</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversion Details for Active File -->
+        <div id="metaCard" class="glass-card meta-card" style="display: none;">
+          <div class="panel-header">
+            <h4><i data-lucide="info"></i> Chi Tiết Tệp Đang Chọn</h4>
+          </div>
+          <div class="meta-content">
+            <div class="meta-row">
+              <span>Tên tệp:</span>
+              <strong id="metaFilename">-</strong>
+            </div>
+            <div class="meta-row">
+              <span>Tổng số trang:</span>
+              <span id="metaPages">1</span>
+            </div>
+            <div class="meta-row">
+              <span>Trang chạy qua OCR:</span>
+              <span id="metaOcrPages" class="badge badge-yellow">Không có</span>
+            </div>
+            <div class="meta-row">
+              <span>Chuyển đổi Legacy (.doc/.xls):</span>
+              <span id="metaLegacy">Không</span>
+            </div>
+            <div class="meta-row">
+              <span>Thời gian xử lý:</span>
+              <span id="metaDuration">0 ms</span>
+            </div>
+            <div id="warningsContainer" class="warnings-box" style="display: none;">
+              <h5><i data-lucide="alert-triangle"></i> Cảnh báo:</h5>
+              <ul id="warningsList"></ul>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Editor & Preview Column -->
+      <main class="editor-column">
+        <div class="glass-card editor-card">
+          <!-- Toolbar -->
+          <div class="editor-toolbar">
+            <div class="view-tabs">
+              <button class="tab-btn active" data-view="split">
+                <i data-lucide="columns"></i> Song song
+              </button>
+              <button class="tab-btn" data-view="editor">
+                <i data-lucide="edit-3"></i> Markdown
+              </button>
+              <button class="tab-btn" data-view="preview">
+                <i data-lucide="eye"></i> Xem trước
+              </button>
+            </div>
+
+            <div class="editor-actions">
+              <button id="copyBtn" class="btn btn-secondary" disabled>
+                <i data-lucide="copy"></i> Sao chép
+              </button>
+              <button id="downloadBtn" class="btn btn-secondary" disabled>
+                <i data-lucide="download"></i> Tải file .md này
+              </button>
+              <button id="batchDownloadBtn" class="btn btn-primary" disabled>
+                <i data-lucide="archive"></i> Tải Tất Cả (.zip)
+              </button>
+            </div>
+          </div>
+
+          <!-- Split Container -->
+          <div id="splitContainer" class="split-container view-split">
+            <!-- Left: Raw Markdown Editor -->
+            <div class="pane editor-pane">
+              <textarea id="markdownEditor" placeholder="Nội dung Markdown sẽ xuất hiện tại đây sau khi chọn tệp từ danh sách..." spellcheck="false"></textarea>
+            </div>
+
+            <!-- Right: Rendered HTML Preview -->
+            <div class="pane preview-pane markdown-body" id="previewArea">
+              <div class="preview-empty">
+                <i data-lucide="file-code"></i>
+                <p>Chưa có dữ liệu xem trước</p>
+                <span>Hãy chọn một tài liệu trong danh sách bên trái để xem kết quả Markdown</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Bar -->
+          <div class="editor-status-bar">
+            <div class="status-left">
+              <span id="statusDocName">Chưa chọn tệp</span>
+            </div>
+            <div class="status-right">
+              <span id="statWords">0 từ</span>
+              <span>•</span>
+              <span id="statChars">0 ký tự</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="loading-spinner"></div>
+    <h3 id="loadingTitle">Đang chuyển đổi tài liệu...</h3>
+    <p id="loadingDesc">Đang phân tích cấu trúc, bảng biểu và xử lý OCR các trang scan</p>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/static/app.js?v=2.2"></script>
+</body>
+</html>
