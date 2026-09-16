@@ -61,6 +61,7 @@ class ConvertResponse(BaseModel):
     validation: Optional[ValidationResult] = None
     pages_total: int = 1
     pages_ocr: List[int] = Field(default_factory=list)
+    ocr_engine_used: Optional[str] = "tesseract"
     warnings: List[str] = Field(default_factory=list)
     duration_ms: int = 0
     word_count: int = 0
@@ -87,4 +88,7 @@ class HealthResponse(BaseModel):
     version: str
     libreoffice_available: bool
     tesseract_available: bool
+    paddleocr_available: bool = False
+    available_ocr_engines: List[str] = Field(default_factory=lambda: ["tesseract"])
     density_threshold: int
+

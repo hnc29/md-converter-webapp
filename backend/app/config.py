@@ -8,7 +8,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "MD Converter (MarkItDown + Local OCR)"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
-    HOST: str = os.getenv("HOST", "0.0.0.0")
+    # This application serves private local documents only.  An explicit env
+    # value may not widen it beyond loopback.
+    HOST: str = "127.0.0.1"
     PORT: int = int(os.getenv("PORT", "8088"))
 
     # Paths
@@ -24,13 +26,20 @@ class Settings(BaseSettings):
     # Minimum valid characters per PDF page to consider text layer sufficient.
     # If a page has fewer characters than this threshold, it triggers local OCR.
     MIN_DENSITY_CHARS_PER_PAGE: int = int(os.getenv("OCR_DENSITY_THRESHOLD", "50"))
-    RASTERIZE_DPI: int = int(os.getenv("OCR_RASTERIZE_DPI", "200"))
+    RASTERIZE_DPI: int = int(os.getenv("OCR_RASTERIZE_DPI", "300"))
     
     # Tesseract settings
     TESSERACT_BIN: str = os.getenv("TESSERACT_BIN", "/opt/homebrew/bin/tesseract")
     TESSERACT_LANG: str = os.getenv("TESSERACT_LANG", "vie+eng")
     TESSERACT_PSM: int = int(os.getenv("TESSERACT_PSM", "3"))
+    TESSERACT_OEM: int = int(os.getenv("TESSERACT_OEM", "1"))
     TESSERACT_TIMEOUT_SECONDS: int = int(os.getenv("TESSERACT_TIMEOUT", "60"))
+
+    # PaddleOCR settings
+    DEFAULT_OCR_ENGINE: str = os.getenv("DEFAULT_OCR_ENGINE", "tesseract")
+    PADDLEOCR_LANG: str = os.getenv("PADDLEOCR_LANG", "vi")
+    PADDLEOCR_USE_GPU: bool = os.getenv("PADDLEOCR_USE_GPU", "false").lower() == "true"
+    PADDLEOCR_USE_ANGLE_CLS: bool = os.getenv("PADDLEOCR_USE_ANGLE_CLS", "true").lower() == "true"
 
     # LibreOffice settings
     LIBREOFFICE_BIN: str = os.getenv("LIBREOFFICE_BIN", "")
@@ -38,6 +47,15 @@ class Settings(BaseSettings):
 
     # Timeout
     CONVERSION_TIMEOUT_SECONDS: int = int(os.getenv("CONVERSION_TIMEOUT", "300"))
+
+    def is_paddleocr_available(self) -> bool:
+        """Checks whether PaddleOCR and PaddlePaddle libraries can be loaded."""
+        try:
+            import paddleocr  # noqa: F401
+            import paddle  # noqa: F401
+            return True
+        except Exception:
+            return False
 
     def find_libreoffice_bin(self) -> str | None:
         """Finds LibreOffice executable across Linux and macOS paths, returns None if not found."""

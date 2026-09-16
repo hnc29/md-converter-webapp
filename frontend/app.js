@@ -32,10 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Health & Metadata elements
   const systemHealth = document.getElementById('systemHealth');
   const healthText = document.getElementById('healthText');
+  const ocrStatusBadge = document.getElementById('ocrStatusBadge');
   const metaCard = document.getElementById('metaCard');
   const metaTargetFolder = document.getElementById('metaTargetFolder');
   const metaDocId = document.getElementById('metaDocId');
   const metaTitle = document.getElementById('metaTitle');
+  const metaOcrEngine = document.getElementById('metaOcrEngine');
   const metaValidation = document.getElementById('metaValidation');
   const metaRetention = document.getElementById('metaRetention');
   const metaSha256 = document.getElementById('metaSha256');
@@ -54,6 +56,36 @@ document.addEventListener('DOMContentLoaded', () => {
   let kbReadme = '';
   let rawFilesCache = [];
 
+  // OCR Engine Selection Setup
+  const ocrRadios = document.querySelectorAll('input[name="ocrEngine"]');
+  const savedOcrEngine = localStorage.getItem('doc2md_ocr_engine') || 'tesseract';
+  
+  function updateOcrSelectionUI(engineVal) {
+    ocrRadios.forEach(radio => {
+      const isChecked = radio.value === engineVal;
+      radio.checked = isChecked;
+      const label = radio.closest('.engine-option-label');
+      if (label) {
+        if (isChecked) {
+          label.classList.add('selected');
+        } else {
+          label.classList.remove('selected');
+        }
+      }
+    });
+  }
+
+  updateOcrSelectionUI(savedOcrEngine);
+
+  ocrRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const selected = e.target.value;
+      localStorage.setItem('doc2md_ocr_engine', selected);
+      updateOcrSelectionUI(selected);
+      showToast(`Đã chọn OCR Engine: ${selected === 'paddleocr' ? 'PaddleOCR (Deep Learning)' : 'Tesseract OCR (Nhanh)'}`, 'info');
+    });
+  });
+
   // 1. Check System Health
   async function checkHealth() {
     try {
@@ -64,10 +96,15 @@ document.addEventListener('DOMContentLoaded', () => {
         dot.classList.add('healthy');
         
         let engines = [];
-        if (data.tesseract_available) engines.push('OCR (Tesseract)');
+        if (data.tesseract_available) engines.push('Tesseract');
+        if (data.paddleocr_available) engines.push('PaddleOCR');
         if (data.libreoffice_available) engines.push('LibreOffice');
 
-        healthText.textContent = `Sẵn sàng: ${engines.join(', ') || 'MarkItDown + Normalizer'}`;
+        healthText.textContent = `Sẵn sàng: ${engines.join(' • ') || 'MarkItDown'}`;
+        if (ocrStatusBadge) {
+          const count = (data.tesseract_available ? 1 : 0) + (data.paddleocr_available ? 1 : 0);
+          ocrStatusBadge.textContent = `${count} Models Sẵn Sàng`;
+        }
       }
     } catch (e) {
       healthText.textContent = 'API Sẵn sàng';
@@ -283,6 +320,12 @@ document.addEventListener('DOMContentLoaded', () => {
     metaTitle.textContent = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename;
     metaTitle.title = metaTitle.textContent;
 
+    if (metaOcrEngine) {
+      const eng = doc.ocr_engine_used || 'Tesseract';
+      metaOcrEngine.textContent = eng.toUpperCase();
+      metaOcrEngine.className = `badge ${eng.toLowerCase().includes('paddle') ? 'badge-accent' : 'badge-blue'}`;
+    }
+
     if (doc.validation) {
       metaValidation.textContent = doc.validation.status;
       metaValidation.className = `badge ${doc.validation.status === 'PASS' ? 'badge-green' : (doc.validation.status === 'WARNING' ? 'badge-yellow' : 'badge-red')}`;
@@ -339,10 +382,13 @@ document.addEventListener('DOMContentLoaded', () => {
     rawFilesCache = files;
     loadingOverlay.style.display = 'flex';
 
+    const activeOcrEngine = document.querySelector('input[name="ocrEngine"]:checked')?.value || 'tesseract';
+
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));
+    formData.append('ocr_engine', activeOcrEngine);
 
-    showToast(`Đang BUILD KNOWLEDGE cho ${files.length} tài liệu...`, 'info');
+    showToast(`Đang BUILD KNOWLEDGE (${activeOcrEngine.toUpperCase()}) cho ${files.length} tài liệu...`, 'info');
 
     try {
       const response = await fetch('/api/convert-knowledge-base', {
@@ -392,6 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
           markdown: kbMasterIndex,
           pages_total: 1,
           pages_ocr: [],
+          ocr_engine_used: activeOcrEngine,
           warnings: []
         });
       }
@@ -411,6 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
           validation: d.validation,
           pages_total: d.pages_total,
           pages_ocr: d.pages_ocr,
+          ocr_engine_used: d.ocr_engine_used || activeOcrEngine,
           duration_ms: d.duration_ms,
           word_count: d.word_count,
           character_count: d.character_count,
@@ -519,8 +567,10 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Đang đóng gói Knowledge Package (.zip)...', 'info');
 
     try {
+      const activeOcrEngine = document.querySelector('input[name="ocrEngine"]:checked')?.value || 'tesseract';
       const formData = new FormData();
       rawFilesCache.forEach(f => formData.append('files', f));
+      formData.append('ocr_engine', activeOcrEngine);
 
       const res = await fetch('/api/convert-knowledge-base/zip', {
         method: 'POST',

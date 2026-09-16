@@ -91,7 +91,7 @@ class Orchestrator:
     Coordinates the 7-step AI Knowledge Base document conversion pipeline.
     """
 
-    def process_file(self, original_filename: str, source_path: Path) -> ConvertResponse:
+    def process_file(self, original_filename: str, source_path: Path, ocr_engine: str = "tesseract") -> ConvertResponse:
         start_time = time.time()
         temp_dir = settings.STORAGE_TMP_DIR / f"job_{uuid.uuid4().hex}"
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -131,6 +131,7 @@ class Orchestrator:
                         converted_via_legacy=False,
                         markdown=err_md,
                         warnings=warnings,
+                        ocr_engine_used=ocr_engine,
                         duration_ms=int((time.time() - start_time) * 1000)
                     )
 
@@ -183,7 +184,7 @@ class Orchestrator:
                                 page_number=page_num,
                                 dpi=settings.RASTERIZE_DPI
                             )
-                            ocr_text, confidence = ocr_adapter.perform_ocr(img)
+                            ocr_text, confidence = ocr_adapter.perform_ocr(img, engine=ocr_engine)
                             
                             if confidence is not None and confidence < 0.6:
                                 warnings.append(
@@ -194,7 +195,7 @@ class Orchestrator:
                             page_results.append(
                                 PageResult(
                                     page_number=page_num,
-                                    text=f"> [Extracted from image]\n{ocr_text}" if ocr_text else "*(Trang quét ảnh trống)*",
+                                    text=f"> [Extracted from image via {ocr_engine.upper()}]\n{ocr_text}" if ocr_text else "*(Trang quét ảnh trống)*",
                                     is_ocr=True,
                                     confidence=confidence,
                                     char_count=len(ocr_text)
@@ -273,6 +274,7 @@ class Orchestrator:
                 validation=val_result,
                 pages_total=pages_total,
                 pages_ocr=pages_ocr,
+                ocr_engine_used=ocr_engine,
                 warnings=list(set(warnings)),
                 duration_ms=duration_ms,
                 word_count=word_count,
@@ -284,7 +286,7 @@ class Orchestrator:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def process_knowledge_base(self, files_data: List[Tuple[str, Path]], kb_name: str = "VNPT-AI-Knowledge-Base") -> KnowledgeBaseResponse:
+    def process_knowledge_base(self, files_data: List[Tuple[str, Path]], kb_name: str = "VNPT-AI-Knowledge-Base", ocr_engine: str = "tesseract") -> KnowledgeBaseResponse:
         """
         Builds the complete Knowledge Package:
         - Single Document Mode: 1 file -> upload_to_ai/<doc>.md (NO 00_Master_Index.md)
@@ -294,7 +296,7 @@ class Orchestrator:
         """
         all_converted: List[ConvertResponse] = []
         for filename, temp_path in files_data:
-            res = self.process_file(original_filename=filename, source_path=temp_path)
+            res = self.process_file(original_filename=filename, source_path=temp_path, ocr_engine=ocr_engine)
             all_converted.append(res)
 
         ready_docs = [d for d in all_converted if d.validation and d.validation.is_safe_for_ai]

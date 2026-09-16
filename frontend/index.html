@@ -80,6 +80,36 @@
           </button>
         </div>
 
+        <!-- OCR Engine Selector Card -->
+        <div class="glass-card ocr-select-card">
+          <div class="panel-header">
+            <h4><i data-lucide="cpu"></i> Công Nghệ OCR</h4>
+            <span id="ocrStatusBadge" class="badge badge-accent">2 Engines Sẵn Sàng</span>
+          </div>
+          <div class="ocr-engine-options">
+            <label class="engine-option-label selected" id="labelEngineTesseract">
+              <input type="radio" name="ocrEngine" value="tesseract" checked />
+              <div class="engine-card-inner">
+                <div class="engine-title-row">
+                  <span class="engine-name"><i data-lucide="zap"></i> Tesseract OCR</span>
+                  <span class="engine-tag badge badge-green">Chuẩn Dấu Tiếng Việt</span>
+                </div>
+                <div class="engine-desc">Đầy đủ bộ dấu Tiếng Việt (vie), sắc nét, khuyến nghị cho văn bản hành chính/báo cáo scan</div>
+              </div>
+            </label>
+            <label class="engine-option-label" id="labelEnginePaddle">
+              <input type="radio" name="ocrEngine" value="paddleocr" />
+              <div class="engine-card-inner">
+                <div class="engine-title-row">
+                  <span class="engine-name"><i data-lucide="brain-circuit"></i> PaddleOCR</span>
+                  <span class="engine-tag badge badge-accent">Deep Learning</span>
+                </div>
+                <div class="engine-desc">Nhận diện layout & ký tự đa ngôn ngữ (Tiếng Anh, Latin, bảng biểu & mã hiệu)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <!-- Summary Banner (Hidden until build) -->
         <div id="summaryBanner" class="summary-banner" style="display: none;">
           <div class="summary-stats">
@@ -129,6 +159,10 @@
             <div class="meta-row">
               <span>Tiêu đề:</span>
               <span id="metaTitle" style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+            </div>
+            <div class="meta-row">
+              <span>Engine OCR:</span>
+              <span id="metaOcrEngine" class="badge badge-accent">Tesseract</span>
             </div>
             <div class="meta-row">
               <span>Quality Gate:</span>

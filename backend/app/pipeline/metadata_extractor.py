@@ -62,12 +62,12 @@ class MetadataExtractor:
 
     @staticmethod
     def extract_document_number(text_sample: str) -> str:
-        """Extracts official document number like '2079/QĐ-VNPT-CN' without guessing."""
-        match = re.search(r"(?:Số|Số hiệu|No\.?):\s*([0-9]+[A-Za-z0-9\/\-_]+(?:VNPT|QĐ|TT|BC|HD)?[A-Za-z0-9\/\-_]*)", text_sample, re.IGNORECASE)
+        """Extracts official document number like '2079/QĐ-VNPT-CN' or '239/QĐ-VNPT-HĐTV-KHĐT' without guessing."""
+        match = re.search(r"(?:Số|Số hiệu|No\.?):\s*([0-9]+[\/A-Za-z0-9\-_Đđ]+)", text_sample, re.IGNORECASE)
         if match:
             return match.group(1).strip()
         # Direct pattern match for VN standard doc numbers
-        direct_match = re.search(r"(\d+/(?:QĐ|TT|TB|BC|HD|NQ)-[A-Za-z0-9\-_]+)", text_sample)
+        direct_match = re.search(r"(\d+/(?:QĐ|TT|TB|BC|HD|NQ|QD)-[A-Za-z0-9\-_\/Đđ]+)", text_sample)
         if direct_match:
             return direct_match.group(1).strip()
         return ""

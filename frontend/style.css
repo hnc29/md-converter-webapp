@@ -764,3 +764,83 @@ body {
   box-shadow: 0 8px 25px var(--accent-glow);
 }
 
+/* OCR Engine Selector */
+.ocr-select-card {
+  padding: 0.95rem 1.1rem;
+}
+
+.ocr-engine-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.engine-option-label {
+  display: block;
+  position: relative;
+  cursor: pointer;
+}
+
+.engine-option-label input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.engine-card-inner {
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.engine-option-label:hover .engine-card-inner {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.engine-option-label.selected .engine-card-inner,
+.engine-option-label input[type="radio"]:checked + .engine-card-inner {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.2);
+}
+
+.engine-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.engine-name {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.engine-name i {
+  width: 15px;
+  height: 15px;
+  color: var(--accent-primary);
+}
+
+.engine-tag {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.engine-desc {
+  font-size: 0.725rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+

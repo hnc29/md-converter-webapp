@@ -5,6 +5,12 @@ __pycache__/
 *.pyd
 storage/tmp/*
 !storage/tmp/.gitkeep
+backend/storage/tmp/*
+!backend/storage/tmp/.gitkeep
 .pytest_cache/
 .DS_Store
 .env
+backups/
+*.zip
+*.tar.gz
+

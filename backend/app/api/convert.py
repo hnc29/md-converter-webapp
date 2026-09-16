@@ -4,8 +4,8 @@ import zipfile
 import tempfile
 import shutil
 from pathlib import Path
-from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from ..config import settings
@@ -18,17 +18,31 @@ router = APIRouter(prefix="/api", tags=["Conversion"])
 async def health_check():
     libreoffice_available = settings.find_libreoffice_bin() is not None
     tesseract_available = shutil.which(settings.resolve_tesseract_bin()) is not None or Path(settings.resolve_tesseract_bin()).exists()
+    paddleocr_available = settings.is_paddleocr_available()
+
+    available_engines = []
+    if tesseract_available:
+        available_engines.append("tesseract")
+    if paddleocr_available:
+        available_engines.append("paddleocr")
+    if not available_engines:
+        available_engines.append("tesseract")
 
     return HealthResponse(
         status="ok",
         version=settings.APP_VERSION,
         libreoffice_available=libreoffice_available,
         tesseract_available=tesseract_available,
+        paddleocr_available=paddleocr_available,
+        available_ocr_engines=available_engines,
         density_threshold=settings.MIN_DENSITY_CHARS_PER_PAGE
     )
 
 @router.post("/convert", response_model=ConvertResponse)
-async def convert_file_endpoint(file: UploadFile = File(...)):
+async def convert_file_endpoint(
+    file: UploadFile = File(...),
+    ocr_engine: str = Form("tesseract")
+):
     filename = file.filename or "document.txt"
     ext = Path(filename).suffix.lower()
 
@@ -58,7 +72,8 @@ async def convert_file_endpoint(file: UploadFile = File(...)):
 
         response = orchestrator.process_file(
             original_filename=filename,
-            source_path=temp_path
+            source_path=temp_path,
+            ocr_engine=ocr_engine
         )
         return response
 
@@ -77,7 +92,10 @@ async def convert_file_endpoint(file: UploadFile = File(...)):
             temp_path.unlink(missing_ok=True)
 
 @router.post("/convert-batch", response_model=List[ConvertResponse])
-async def convert_batch_endpoint(files: List[UploadFile] = File(...)):
+async def convert_batch_endpoint(
+    files: List[UploadFile] = File(...),
+    ocr_engine: str = Form("tesseract")
+):
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -103,7 +121,8 @@ async def convert_batch_endpoint(files: List[UploadFile] = File(...)):
 
             res = orchestrator.process_file(
                 original_filename=filename,
-                source_path=temp_path
+                source_path=temp_path,
+                ocr_engine=ocr_engine
             )
             results.append(res)
         finally:
@@ -113,7 +132,10 @@ async def convert_batch_endpoint(files: List[UploadFile] = File(...)):
     return results
 
 @router.post("/convert-batch/zip")
-async def convert_batch_zip_endpoint(files: List[UploadFile] = File(...)):
+async def convert_batch_zip_endpoint(
+    files: List[UploadFile] = File(...),
+    ocr_engine: str = Form("tesseract")
+):
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -140,7 +162,8 @@ async def convert_batch_zip_endpoint(files: List[UploadFile] = File(...)):
 
                 res = orchestrator.process_file(
                     original_filename=filename,
-                    source_path=temp_path
+                    source_path=temp_path,
+                    ocr_engine=ocr_engine
                 )
                 base_name = Path(filename).stem
                 zip_file.writestr(f"{base_name}.md", res.markdown.encode("utf-8"))
@@ -156,7 +179,10 @@ async def convert_batch_zip_endpoint(files: List[UploadFile] = File(...)):
     )
 
 @router.post("/convert-knowledge-base", response_model=KnowledgeBaseResponse)
-async def convert_knowledge_base_endpoint(files: List[UploadFile] = File(...)):
+async def convert_knowledge_base_endpoint(
+    files: List[UploadFile] = File(...),
+    ocr_engine: str = Form("tesseract")
+):
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -191,7 +217,7 @@ async def convert_knowledge_base_endpoint(files: List[UploadFile] = File(...)):
                 detail="None of the uploaded files have supported extensions."
             )
 
-        kb_result = orchestrator.process_knowledge_base(saved_files)
+        kb_result = orchestrator.process_knowledge_base(saved_files, ocr_engine=ocr_engine)
         return kb_result
 
     finally:
@@ -200,7 +226,10 @@ async def convert_knowledge_base_endpoint(files: List[UploadFile] = File(...)):
                 p.unlink(missing_ok=True)
 
 @router.post("/convert-knowledge-base/zip")
-async def convert_knowledge_base_zip_endpoint(files: List[UploadFile] = File(...)):
+async def convert_knowledge_base_zip_endpoint(
+    files: List[UploadFile] = File(...),
+    ocr_engine: str = Form("tesseract")
+):
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -236,7 +265,7 @@ async def convert_knowledge_base_zip_endpoint(files: List[UploadFile] = File(...
             )
 
         files_data = [(fn, p) for fn, p, _ in saved_files]
-        kb_result = orchestrator.process_knowledge_base(files_data)
+        kb_result = orchestrator.process_knowledge_base(files_data, ocr_engine=ocr_engine)
 
         # Build ZIP matching the EXACT Knowledge Package specification
         zip_buffer = io.BytesIO()

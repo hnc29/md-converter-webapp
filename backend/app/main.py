@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .config import settings
 from .api.convert import router as convert_router
+from .api.ingestion import router as ingestion_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -24,6 +25,7 @@ app.add_middleware(
 
 # Include API Router
 app.include_router(convert_router)
+app.include_router(ingestion_router)
 
 # Mount Frontend static files and assets with no-cache headers
 frontend_dir = settings.PROJECT_ROOT.parent / "frontend"

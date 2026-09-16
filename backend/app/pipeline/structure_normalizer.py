@@ -55,13 +55,49 @@ class StructureNormalizer:
         s = re.sub(r"-+", "-", s).strip("-")
         return s or "section"
 
+    @staticmethod
+    def format_document_structure(text: str) -> str:
+        """
+        Detects standard Vietnamese legal/administrative headers, chapters, articles,
+        and converts them to appropriate Markdown heading hierarchies (#, ##, ###).
+        """
+        if not text:
+            return ""
+
+        lines = text.split("\n")
+        output: List[str] = []
+
+        for line in lines:
+            s = line.strip()
+            # Preserve existing Markdown headings or comments
+            if s.startswith("#") or s.startswith("<!--") or s.startswith(">") or not s:
+                output.append(line)
+                continue
+
+            # Check for Chapter heading (e.g. CHƯƠNG I, CHƯƠNG II...)
+            if re.match(r"^CHƯƠNG\s+[IVXLCDM]+", s, re.IGNORECASE):
+                output.append(f"\n## {s}\n")
+            # Check for Article heading (e.g. Điều 1., Điều 2:...)
+            elif re.match(r"^Điều\s+\d+[\.:]", s, re.IGNORECASE):
+                output.append(f"\n### {s}\n")
+            # Check for Major Heading (QUYẾT ĐỊNH, QUY CHẾ PHÂN CẤP...)
+            elif re.match(r"^(QUYẾT ĐỊNH|QUY CHẾ PHÂN CẤP|HỘI ĐỒNG THÀNH VIÊN)\b", s):
+                output.append(f"\n# {s}\n")
+            else:
+                output.append(line)
+
+        formatted = "\n".join(output)
+        return re.sub(r"\n{3,}", "\n\n", formatted)
+
     def process_headings_and_sections(self, markdown: str) -> Tuple[str, List[SectionInfo]]:
         """
         Processes headings in Markdown:
-        1. Injects stable anchor tags: <a id="sec-..."></a>
-        2. Tracks page boundaries (from <!-- source_page: X -->)
-        3. Extracts hierarchical SectionInfo list for Master Index & manifest.json.
+        1. Formats administrative structural elements (Chapters, Articles)
+        2. Injects stable anchor tags: <a id="sec-..."></a>
+        3. Tracks page boundaries (from <!-- source_page: X -->)
+        4. Extracts hierarchical SectionInfo list for Master Index & manifest.json.
         """
+        markdown = self.format_document_structure(markdown)
         lines = markdown.split("\n")
         output_lines: List[str] = []
         sections: List[SectionInfo] = []

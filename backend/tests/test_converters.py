@@ -162,3 +162,20 @@ def test_convert_batch_zip():
         namelist = zf.namelist()
         assert "sample_table.md" in namelist
         assert "sample_multisheet.md" in namelist
+
+def test_convert_with_paddleocr_engine():
+    fixtures_dir = Path(__file__).parent / "fixtures"
+    pdf_path = fixtures_dir / "sample_scanned.pdf"
+
+    with open(pdf_path, "rb") as f:
+        response = client.post(
+            "/api/convert",
+            files={"file": ("sample_scanned.pdf", f, "application/pdf")},
+            data={"ocr_engine": "paddleocr"}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pages_total"] == 1
+    assert 1 in data["pages_ocr"]
+    assert data["ocr_engine_used"] == "paddleocr"
+
