@@ -29,6 +29,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadingOverlay = document.getElementById('loadingOverlay');
   const toastContainer = document.getElementById('toastContainer');
   
+  // Batch OCR Live Progress elements
+  const progressBarFill = document.getElementById('progressBarFill');
+  const progressPercentText = document.getElementById('progressPercentText');
+  const progressCurrentFile = document.getElementById('progressCurrentFile');
+  const statTotalFiles = document.getElementById('statTotalFiles');
+  const statCompletedFiles = document.getElementById('statCompletedFiles');
+  const statRemainingFiles = document.getElementById('statRemainingFiles');
+  const progressDetailText = document.getElementById('progressDetailText');
+  
   // Health & Metadata elements
   const systemHealth = document.getElementById('systemHealth');
   const healthText = document.getElementById('healthText');
@@ -374,7 +383,165 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 5. BUILD KNOWLEDGE Batch Execution
+  // Progress UI Update Helper
+  function updateProgressUI(evt) {
+    if (!evt) return;
+    const total = evt.total_files || (rawFilesCache ? rawFilesCache.length : 1);
+    const completed = evt.completed_files ?? 0;
+    const remaining = evt.remaining_files ?? Math.max(0, total - completed);
+    const percent = Math.min(100, Math.max(0, evt.percent ?? Math.round((completed / total) * 100)));
+
+    if (progressBarFill) progressBarFill.style.width = `${percent}%`;
+    if (progressPercentText) progressPercentText.textContent = `${percent}%`;
+    if (statTotalFiles) statTotalFiles.textContent = total;
+    if (statCompletedFiles) statCompletedFiles.textContent = completed;
+    if (statRemainingFiles) statRemainingFiles.textContent = remaining;
+
+    if (evt.filename && progressCurrentFile) {
+      progressCurrentFile.textContent = evt.filename;
+      progressCurrentFile.title = evt.filename;
+    }
+
+    if (progressDetailText) {
+      const msg = evt.message || `Đang xử lý ${completed}/${total} file (${percent}%)...`;
+      progressDetailText.innerHTML = `<i data-lucide="loader" class="spin-icon"></i> ${msg}`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  // Handle successful conversion result
+  function handleConversionSuccess(kbData, activeOcrEngine) {
+    kbMasterIndex = kbData.master_index_md;
+    kbManifest = kbData.manifest_json;
+    kbReport = kbData.conversion_report_md;
+    kbReadme = kbData.readme_txt;
+
+    // Update Summary Banner
+    summaryBanner.style.display = 'flex';
+    readyBadge.textContent = `🚀 ${kbData.ready_count} Sẵn sàng nạp AI`;
+    
+    if (kbData.warning_count > 0) {
+      warnBadge.style.display = 'inline-block';
+      warnBadge.textContent = `⚠️ ${kbData.warning_count} Cảnh báo`;
+    } else {
+      warnBadge.style.display = 'none';
+    }
+
+    if (kbData.failed_count > 0) {
+      failBadge.style.display = 'inline-block';
+      failBadge.textContent = `❌ ${kbData.failed_count} Cần kiểm tra`;
+    } else {
+      failBadge.style.display = 'none';
+    }
+
+    // Build structured document list
+    const readyDocItems = [];
+    if (!kbData.is_single_mode && kbMasterIndex) {
+      readyDocItems.push({
+        id: 'kb_master_index',
+        filename: '00_Master_Index.md',
+        document_id: 'MASTER-INDEX',
+        status: 'completed',
+        isSpecial: true,
+        group: 'upload_to_ai',
+        markdown: kbMasterIndex,
+        pages_total: 1,
+        pages_ocr: [],
+        ocr_engine_used: activeOcrEngine,
+        warnings: []
+      });
+    }
+
+    kbData.upload_to_ai_documents.forEach(d => {
+      const baseName = d.filename.replace(/\.[^/.]+$/, '');
+      readyDocItems.push({
+        id: Math.random().toString(36).substring(2, 9),
+        filename: `${baseName}.md`,
+        document_id: d.document_id,
+        status: 'completed',
+        isSpecial: false,
+        group: 'upload_to_ai',
+        markdown: d.markdown,
+        metadata: d.metadata,
+        sections: d.sections,
+        validation: d.validation,
+        pages_total: d.pages_total,
+        pages_ocr: d.pages_ocr,
+        ocr_engine_used: d.ocr_engine_used || activeOcrEngine,
+        duration_ms: d.duration_ms,
+        word_count: d.word_count,
+        character_count: d.character_count,
+        warnings: d.warnings || []
+      });
+    });
+
+    const technicalDocItems = [
+      {
+        id: 'kb_report',
+        filename: 'conversion_report.md',
+        document_id: 'QUALITY-REPORT',
+        status: 'completed',
+        isSpecial: true,
+        group: 'technical',
+        markdown: kbReport,
+        pages_total: 1,
+        pages_ocr: [],
+        warnings: []
+      },
+      {
+        id: 'kb_manifest',
+        filename: 'manifest.json',
+        document_id: 'MANIFEST-JSON',
+        status: 'completed',
+        isSpecial: true,
+        group: 'technical',
+        markdown: '```json\n' + JSON.stringify(kbManifest, null, 2) + '\n```',
+        pages_total: 1,
+        pages_ocr: [],
+        warnings: []
+      },
+      {
+        id: 'kb_readme',
+        filename: 'README.txt',
+        document_id: 'README-TXT',
+        status: 'completed',
+        isSpecial: true,
+        group: 'technical',
+        markdown: '```text\n' + kbReadme + '\n```',
+        pages_total: 1,
+        pages_ocr: [],
+        warnings: []
+      }
+    ];
+
+    kbData.failed_documents.forEach(d => {
+      const baseName = d.filename.replace(/\.[^/.]+$/, '');
+      technicalDocItems.push({
+        id: Math.random().toString(36).substring(2, 9),
+        filename: `failed/${baseName}.md`,
+        document_id: d.document_id,
+        status: 'error',
+        isSpecial: false,
+        group: 'technical',
+        markdown: d.markdown,
+        metadata: d.metadata,
+        sections: d.sections,
+        validation: d.validation,
+        pages_total: d.pages_total,
+        pages_ocr: d.pages_ocr,
+        warnings: d.warnings || []
+      });
+    });
+
+    documents = [...readyDocItems, ...technicalDocItems];
+    activeDocId = readyDocItems[0] ? readyDocItems[0].id : technicalDocItems[0].id;
+    renderQueue();
+    selectActiveDocument(activeDocId);
+
+    showToast(`Đã hoàn thành OCR & chuyển đổi thành công (${kbData.ready_count} tài liệu trong upload_to_ai/)!`, 'success');
+  }
+
+  // 5. BUILD KNOWLEDGE Batch Execution with Live Progress Streaming
   async function handleFiles(fileList) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -382,154 +549,92 @@ document.addEventListener('DOMContentLoaded', () => {
     rawFilesCache = files;
     loadingOverlay.style.display = 'flex';
 
-    const activeOcrEngine = document.querySelector('input[name="ocrEngine"]:checked')?.value || 'tesseract';
+    // Initialize progress dashboard
+    updateProgressUI({
+      total_files: files.length,
+      completed_files: 0,
+      remaining_files: files.length,
+      percent: 0,
+      filename: files[0] ? files[0].name : 'Đang chuẩn bị...',
+      message: `Bắt đầu xử lý OCR hàng loạt cho ${files.length} tài liệu...`
+    });
 
+    const activeOcrEngine = document.querySelector('input[name="ocrEngine"]:checked')?.value || 'tesseract';
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));
     formData.append('ocr_engine', activeOcrEngine);
 
     showToast(`Đang BUILD KNOWLEDGE (${activeOcrEngine.toUpperCase()}) cho ${files.length} tài liệu...`, 'info');
 
+    let streamCompleted = false;
+
     try {
-      const response = await fetch('/api/convert-knowledge-base', {
+      // 1. Primary: Streaming SSE endpoint with live progress
+      const response = await fetch('/api/convert-knowledge-base/stream', {
         method: 'POST',
         body: formData
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({ detail: 'Lỗi máy chủ' }));
-        throw new Error(errData.detail || `Lỗi (${response.status})`);
-      }
+      if (response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
 
-      const kbData = await response.json();
-      kbMasterIndex = kbData.master_index_md;
-      kbManifest = kbData.manifest_json;
-      kbReport = kbData.conversion_report_md;
-      kbReadme = kbData.readme_txt;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
 
-      // Update Summary Banner
-      summaryBanner.style.display = 'flex';
-      readyBadge.textContent = `🚀 ${kbData.ready_count} Sẵn sàng nạp AI`;
-      
-      if (kbData.warning_count > 0) {
-        warnBadge.style.display = 'inline-block';
-        warnBadge.textContent = `⚠️ ${kbData.warning_count} Cảnh báo`;
-      } else {
-        warnBadge.style.display = 'none';
-      }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // keep trailing incomplete piece
 
-      if (kbData.failed_count > 0) {
-        failBadge.style.display = 'inline-block';
-        failBadge.textContent = `❌ ${kbData.failed_count} Cần kiểm tra`;
-      } else {
-        failBadge.style.display = 'none';
-      }
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data:')) {
+              const jsonStr = trimmed.replace(/^data:\s*/, '');
+              if (!jsonStr) continue;
+              try {
+                const evt = JSON.parse(jsonStr);
+                updateProgressUI(evt);
 
-      // Build structured document list
-      const readyDocItems = [];
-      if (!kbData.is_single_mode && kbMasterIndex) {
-        readyDocItems.push({
-          id: 'kb_master_index',
-          filename: '00_Master_Index.md',
-          document_id: 'MASTER-INDEX',
-          status: 'completed',
-          isSpecial: true,
-          group: 'upload_to_ai',
-          markdown: kbMasterIndex,
-          pages_total: 1,
-          pages_ocr: [],
-          ocr_engine_used: activeOcrEngine,
-          warnings: []
-        });
-      }
-
-      kbData.upload_to_ai_documents.forEach(d => {
-        const baseName = d.filename.replace(/\.[^/.]+$/, '');
-        readyDocItems.push({
-          id: Math.random().toString(36).substring(2, 9),
-          filename: `${baseName}.md`,
-          document_id: d.document_id,
-          status: 'completed',
-          isSpecial: false,
-          group: 'upload_to_ai',
-          markdown: d.markdown,
-          metadata: d.metadata,
-          sections: d.sections,
-          validation: d.validation,
-          pages_total: d.pages_total,
-          pages_ocr: d.pages_ocr,
-          ocr_engine_used: d.ocr_engine_used || activeOcrEngine,
-          duration_ms: d.duration_ms,
-          word_count: d.word_count,
-          character_count: d.character_count,
-          warnings: d.warnings || []
-        });
-      });
-
-      const technicalDocItems = [
-        {
-          id: 'kb_report',
-          filename: 'conversion_report.md',
-          document_id: 'QUALITY-REPORT',
-          status: 'completed',
-          isSpecial: true,
-          group: 'technical',
-          markdown: kbReport,
-          pages_total: 1,
-          pages_ocr: [],
-          warnings: []
-        },
-        {
-          id: 'kb_manifest',
-          filename: 'manifest.json',
-          document_id: 'MANIFEST-JSON',
-          status: 'completed',
-          isSpecial: true,
-          group: 'technical',
-          markdown: '```json\n' + JSON.stringify(kbManifest, null, 2) + '\n```',
-          pages_total: 1,
-          pages_ocr: [],
-          warnings: []
-        },
-        {
-          id: 'kb_readme',
-          filename: 'README.txt',
-          document_id: 'README-TXT',
-          status: 'completed',
-          isSpecial: true,
-          group: 'technical',
-          markdown: '```text\n' + kbReadme + '\n```',
-          pages_total: 1,
-          pages_ocr: [],
-          warnings: []
+                if (evt.type === 'complete') {
+                  streamCompleted = true;
+                  handleConversionSuccess(evt.result, activeOcrEngine);
+                } else if (evt.type === 'error') {
+                  throw new Error(evt.message || 'Lỗi trong quá trình chuyển đổi');
+                }
+              } catch (parseErr) {
+                if (parseErr.message && !parseErr.message.includes('JSON')) {
+                  throw parseErr;
+                }
+              }
+            }
+          }
         }
-      ];
+      }
 
-      kbData.failed_documents.forEach(d => {
-        const baseName = d.filename.replace(/\.[^/.]+$/, '');
-        technicalDocItems.push({
-          id: Math.random().toString(36).substring(2, 9),
-          filename: `failed/${baseName}.md`,
-          document_id: d.document_id,
-          status: 'error',
-          isSpecial: false,
-          group: 'technical',
-          markdown: d.markdown,
-          metadata: d.metadata,
-          sections: d.sections,
-          validation: d.validation,
-          pages_total: d.pages_total,
-          pages_ocr: d.pages_ocr,
-          warnings: d.warnings || []
+      // 2. Fallback to standard endpoint if streaming was not supported
+      if (!streamCompleted) {
+        const fallbackRes = await fetch('/api/convert-knowledge-base', {
+          method: 'POST',
+          body: formData
         });
-      });
 
-      documents = [...readyDocItems, ...technicalDocItems];
-      activeDocId = readyDocItems[0] ? readyDocItems[0].id : technicalDocItems[0].id;
-      renderQueue();
-      selectActiveDocument(activeDocId);
+        if (!fallbackRes.ok) {
+          const errData = await fallbackRes.json().catch(() => ({ detail: 'Lỗi máy chủ' }));
+          throw new Error(errData.detail || `Lỗi (${fallbackRes.status})`);
+        }
 
-      showToast(`Đã BUILD KNOWLEDGE thành công (${kbData.ready_count} tài liệu trong upload_to_ai/)!`, 'success');
+        const kbData = await fallbackRes.json();
+        updateProgressUI({
+          total_files: files.length,
+          completed_files: files.length,
+          remaining_files: 0,
+          percent: 100,
+          message: 'Đã hoàn tất xử lý tất cả tệp.'
+        });
+        handleConversionSuccess(kbData, activeOcrEngine);
+      }
 
     } catch (err) {
       showToast(`Lỗi: ${err.message}`, 'error');

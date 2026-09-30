@@ -3,7 +3,7 @@ import shutil
 import uuid
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Callable
 from docx import Document
 
 from ..config import settings
@@ -91,7 +91,13 @@ class Orchestrator:
     Coordinates the 7-step AI Knowledge Base document conversion pipeline.
     """
 
-    def process_file(self, original_filename: str, source_path: Path, ocr_engine: str = "tesseract") -> ConvertResponse:
+    def process_file(
+        self,
+        original_filename: str,
+        source_path: Path,
+        ocr_engine: str = "tesseract",
+        on_progress: Optional[Callable[[dict], None]] = None
+    ) -> ConvertResponse:
         start_time = time.time()
         temp_dir = settings.STORAGE_TMP_DIR / f"job_{uuid.uuid4().hex}"
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -163,9 +169,17 @@ class Orchestrator:
             elif ext == ".pdf":
                 is_paginated = True
                 try:
+                    repaired_path = density_checker.ensure_valid_pdf(current_path, temp_dir)
+                    if repaired_path != current_path:
+                        current_path = repaired_path
+                        warnings.append("Tệp PDF có cấu trúc phức tạp/lỗi xref đã được tự động phục hồi.")
                     pdf_inspection = density_checker.inspect_pdf_pages(current_path)
                 except Exception as pdf_err:
                     warnings.append(f"Lỗi đọc PDF: {str(pdf_err)}")
+                    pdf_inspection = [(1, "", True)]
+
+                if not pdf_inspection:
+                    warnings.append("Không trích xuất được trang nào từ tệp PDF.")
                     pdf_inspection = [(1, "", True)]
 
                 pages_total = max(1, len(pdf_inspection))
@@ -173,8 +187,13 @@ class Orchestrator:
                 raw_parts: List[str] = []
 
                 for page_num, text_layer, needs_ocr in pdf_inspection:
-                    if text_layer:
-                        raw_parts.append(text_layer)
+                    if on_progress:
+                        on_progress({
+                            "type": "page_progress",
+                            "page_current": page_num,
+                            "page_total": pages_total,
+                            "is_ocr": needs_ocr
+                        })
 
                     if needs_ocr:
                         pages_ocr.append(page_num)
@@ -186,6 +205,14 @@ class Orchestrator:
                             )
                             ocr_text, confidence = ocr_adapter.perform_ocr(img, engine=ocr_engine)
                             
+                            # Fallback to existing text layer if OCR text is empty but text_layer has content
+                            if (not ocr_text or not ocr_text.strip()) and text_layer and text_layer.strip():
+                                ocr_text = vietnamese_processor.process_text(text_layer)
+                                confidence = 0.6
+                                warnings.append(
+                                    f"Trang {page_num}: OCR không trích xuất được chữ, tự động sử dụng lớp văn bản (text layer) có sẵn."
+                                )
+
                             if confidence is not None and confidence < 0.6:
                                 warnings.append(
                                     f"Trang {page_num}: Độ tin cậy OCR ({int(confidence * 100)}%)."
@@ -203,6 +230,7 @@ class Orchestrator:
                             )
                         except (OCRAdapterError, Exception) as ocr_err:
                             warnings.append(f"Lỗi OCR tại trang {page_num}: {str(ocr_err)}")
+                            raw_parts.append(text_layer or "")
                             page_results.append(
                                 PageResult(
                                     page_number=page_num,
@@ -212,6 +240,7 @@ class Orchestrator:
                                 )
                             )
                     else:
+                        raw_parts.append(text_layer)
                         page_results.append(
                             PageResult(
                                 page_number=page_num,
@@ -221,7 +250,7 @@ class Orchestrator:
                             )
                         )
 
-                if len(pages_ocr) == pages_total:
+                if len(pages_ocr) > 0 and (len(pages_ocr) == pages_total or len(pages_ocr) >= (pages_total * 0.5)):
                     is_pure_ocr = True
 
                 # Merge pages with explicit source_page markers
@@ -286,7 +315,13 @@ class Orchestrator:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def process_knowledge_base(self, files_data: List[Tuple[str, Path]], kb_name: str = "VNPT-AI-Knowledge-Base", ocr_engine: str = "tesseract") -> KnowledgeBaseResponse:
+    def process_knowledge_base(
+        self,
+        files_data: List[Tuple[str, Path]],
+        kb_name: str = "VNPT-AI-Knowledge-Base",
+        ocr_engine: str = "tesseract",
+        on_progress: Optional[Callable[[dict], None]] = None
+    ) -> KnowledgeBaseResponse:
         """
         Builds the complete Knowledge Package:
         - Single Document Mode: 1 file -> upload_to_ai/<doc>.md (NO 00_Master_Index.md)
@@ -294,10 +329,62 @@ class Orchestrator:
         - Separates ready documents from failed documents via Quality Gate
         - Generates technical/manifest.json, technical/conversion_report.md, README.txt
         """
+        total_files = len(files_data)
         all_converted: List[ConvertResponse] = []
-        for filename, temp_path in files_data:
-            res = self.process_file(original_filename=filename, source_path=temp_path, ocr_engine=ocr_engine)
+        for idx, (filename, temp_path) in enumerate(files_data):
+            if on_progress:
+                on_progress({
+                    "type": "file_start",
+                    "filename": filename,
+                    "file_index": idx + 1,
+                    "total_files": total_files,
+                    "completed_files": idx,
+                    "remaining_files": total_files - idx,
+                    "percent": int((idx / max(1, total_files)) * 100),
+                    "message": f"Đang xử lý ({idx + 1}/{total_files}): {filename}"
+                })
+
+            def file_page_callback(pg_info):
+                if on_progress:
+                    p_curr = pg_info.get("page_current", 1)
+                    p_tot = pg_info.get("page_total", 1)
+                    fraction = (p_curr - 1) / max(1, p_tot)
+                    current_percent = int(((idx + fraction) / max(1, total_files)) * 100)
+                    is_ocr = pg_info.get("is_ocr", False)
+                    action = "OCR trang" if is_ocr else "Đọc trang"
+                    on_progress({
+                        "type": "page_progress",
+                        "filename": filename,
+                        "file_index": idx + 1,
+                        "total_files": total_files,
+                        "completed_files": idx,
+                        "remaining_files": total_files - idx,
+                        "page_current": p_curr,
+                        "page_total": p_tot,
+                        "percent": current_percent,
+                        "message": f"Đang {action} {p_curr}/{p_tot} ({filename})"
+                    })
+
+            res = self.process_file(
+                original_filename=filename,
+                source_path=temp_path,
+                ocr_engine=ocr_engine,
+                on_progress=file_page_callback if on_progress else None
+            )
             all_converted.append(res)
+
+            completed = idx + 1
+            if on_progress:
+                on_progress({
+                    "type": "file_done",
+                    "filename": filename,
+                    "file_index": idx + 1,
+                    "total_files": total_files,
+                    "completed_files": completed,
+                    "remaining_files": total_files - completed,
+                    "percent": int((completed / max(1, total_files)) * 100),
+                    "message": f"Đã hoàn thành ({completed}/{total_files}): {filename}"
+                })
 
         ready_docs = [d for d in all_converted if d.validation and d.validation.is_safe_for_ai]
         failed_docs = [d for d in all_converted if d.validation and not d.validation.is_safe_for_ai]

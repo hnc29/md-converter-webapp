@@ -74,15 +74,21 @@ class StructureNormalizer:
                 output.append(line)
                 continue
 
-            # Check for Chapter heading (e.g. CHƯƠNG I, CHƯƠNG II...)
-            if re.match(r"^CHƯƠNG\s+[IVXLCDM]+", s, re.IGNORECASE):
-                output.append(f"\n## {s}\n")
-            # Check for Article heading (e.g. Điều 1., Điều 2:...)
-            elif re.match(r"^Điều\s+\d+[\.:]", s, re.IGNORECASE):
-                output.append(f"\n### {s}\n")
-            # Check for Major Heading (QUYẾT ĐỊNH, QUY CHẾ PHÂN CẤP...)
-            elif re.match(r"^(QUYẾT ĐỊNH|QUY CHẾ PHÂN CẤP|HỘI ĐỒNG THÀNH VIÊN)\b", s):
+            # Check for Major Heading (QUYẾT ĐỊNH, QUY CHẾ, QUY ĐỊNH, BẢN CAM KẾT...)
+            if re.match(r"^(QUYẾT ĐỊNH|QUY CHẾ|QUY ĐỊNH|BẢN CAM KẾT|NGUYÊN TẮC|CHÍNH SÁCH)\b", s, re.IGNORECASE) and len(s) < 120:
                 output.append(f"\n# {s}\n")
+            # Check for Chapter heading (e.g. CHƯƠNG I, CHƯƠNG 1, Phần I...)
+            elif re.match(r"^(CHƯƠNG|PHẦN)\s+([IVXLCDM]+|\d+)\b", s, re.IGNORECASE):
+                output.append(f"\n## {s}\n")
+            # Check for Appendix heading (e.g. Phụ lục 1, Phụ lục I, Phụ lục: ...)
+            elif re.match(r"^Phụ\s+lục\s*([IVXLCDM]+|\d+|:)?\b", s, re.IGNORECASE) and len(s) < 80:
+                output.append(f"\n## {s}\n")
+            # Check for Section heading (e.g. Mục I, Mục 1., Mục A...)
+            elif re.match(r"^Mục\s+([IVXLCDM]+|\d+|[A-Z])[\.:\s]", s, re.IGNORECASE):
+                output.append(f"\n### {s}\n")
+            # Check for Article heading (e.g. Điều 1., Điều 2:, Điều 3...)
+            elif re.match(r"^Điều\s+\d+[\.:\s\-]", s, re.IGNORECASE):
+                output.append(f"\n### {s}\n")
             else:
                 output.append(line)
 

@@ -23,15 +23,22 @@ class MarkdownValidator:
         if has_null:
             errors.append("Tài liệu chứa ký tự NULL byte không hợp lệ.")
 
-        # 2. File không rỗng
-        is_not_empty = bool(markdown and len(markdown.strip()) > 20)
+        # Extract actual body content (strip YAML front matter if present)
+        body = markdown
+        if markdown.strip().startswith("---"):
+            parts = markdown.split("---", 2)
+            if len(parts) >= 3:
+                body = parts[2].strip()
+
+        # 2. File không rỗng (Kiểm tra phần thân tài liệu, loại trừ frontmatter)
+        is_not_empty = bool(body and len(body.strip()) > 20)
         checks.append(ValidationCheck(
             name="Nội dung không rỗng",
             passed=is_not_empty,
-            message="Tài liệu có nội dung đầy đủ." if is_not_empty else "Tài liệu rỗng hoặc quá ngắn."
+            message="Tài liệu có nội dung đầy đủ." if is_not_empty else "Tài liệu rỗng hoặc không có nội dung văn bản sau phần metadata."
         ))
         if not is_not_empty:
-            errors.append("Tài liệu rỗng hoặc quá ngắn sau khi chuyển đổi.")
+            errors.append("Tài liệu không có nội dung văn bản sau khi chuyển đổi.")
 
         # 3. Có source_file & title trong metadata
         has_source = bool(metadata.source_file.strip())
@@ -88,13 +95,14 @@ class MarkdownValidator:
         # 8. Tỷ lệ giữ lại ký tự (Quality Gate: >= 90% PASS, 75%-90% WARNING, < 75% FAIL)
         retention = metadata.text_retention_ratio
         if is_ocr:
-            # For scanned image OCR, text length in original file is 0 or tiny
-            retention_pass = True
+            ocr_has_content = bool(metadata.markdown_text_char_count and metadata.markdown_text_char_count > 20)
             checks.append(ValidationCheck(
                 name="Tỷ lệ bảo toàn nội dung (OCR Image)",
-                passed=True,
-                message=f"Tài liệu OCR trích xuất {metadata.markdown_text_char_count} ký tự."
+                passed=ocr_has_content,
+                message=f"Tài liệu OCR trích xuất {metadata.markdown_text_char_count} ký tự." if ocr_has_content else "Không trích xuất được ký tự nào từ tài liệu quét OCR."
             ))
+            if not ocr_has_content:
+                errors.append("FAILED: Quá trình OCR không trích xuất được nội dung ký tự nào từ trang ảnh.")
         else:
             if retention >= 0.90:
                 retention_status = "PASS"

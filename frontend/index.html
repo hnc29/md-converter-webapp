@@ -247,16 +247,56 @@
     </div>
   </div>
 
-  <!-- Loading Overlay -->
+  <!-- Loading & Batch OCR Progress Overlay -->
   <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-    <div class="loading-spinner"></div>
-    <h3 id="loadingTitle">Đang BUILD KNOWLEDGE...</h3>
-    <p id="loadingDesc">Đang chuẩn hóa Unicode NFC, trích xuất cấu trúc, tạo thư mục upload_to_ai/ và kiểm tra Quality Gate</p>
+    <div class="progress-card">
+      <div class="progress-header">
+        <div class="loading-spinner"></div>
+        <div class="progress-header-text">
+          <h3 id="loadingTitle">Đang BUILD KNOWLEDGE & OCR...</h3>
+          <p id="loadingDesc" class="progress-desc">Đang chuẩn hóa Unicode NFC, trích xuất cấu trúc và kiểm tra Quality Gate</p>
+        </div>
+      </div>
+
+      <!-- Main Progress Bar -->
+      <div class="progress-bar-container">
+        <div class="progress-bar-track">
+          <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+        </div>
+        <div class="progress-bar-info">
+          <span id="progressCurrentFile" class="progress-current-filename" title="Đang xử lý">Đang chuẩn bị tệp...</span>
+          <span id="progressPercentText" class="progress-percent-badge">0%</span>
+        </div>
+      </div>
+
+      <!-- Stats Grid: Total, OCR/Done, Remaining -->
+      <div class="progress-stats-grid">
+        <div class="progress-stat-box">
+          <span class="stat-box-label"><i data-lucide="files" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> Tổng số file</span>
+          <strong id="statTotalFiles" class="stat-box-val">0</strong>
+        </div>
+        <div class="progress-stat-box stat-done">
+          <span class="stat-box-label"><i data-lucide="check-circle-2" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> Đã xử lý / OCR</span>
+          <strong id="statCompletedFiles" class="stat-box-val">0</strong>
+        </div>
+        <div class="progress-stat-box stat-remaining">
+          <span class="stat-box-label"><i data-lucide="clock" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> Số còn lại</span>
+          <strong id="statRemainingFiles" class="stat-box-val">0</strong>
+        </div>
+      </div>
+
+      <!-- Detail status log -->
+      <div class="progress-detail-row">
+        <span id="progressDetailText" class="progress-detail-text">
+          <i data-lucide="loader" class="spin-icon"></i> Đang khởi tạo luồng xử lý...
+        </span>
+      </div>
+    </div>
   </div>
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/static/app.js?v=3.5"></script>
+  <script src="/static/app.js?v=4.0"></script>
 </body>
 </html>

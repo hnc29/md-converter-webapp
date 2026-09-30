@@ -64,9 +64,34 @@ class OCRAdapter:
         except Exception:
             return image
 
+    def _auto_rotate_image(self, image: Image.Image) -> Image.Image:
+        """
+        Detects orientation of scanned documents (e.g. landscape tables scanned in portrait)
+        and rotates the image upright to ensure high-accuracy OCR.
+        """
+        try:
+            w, h = image.size
+            if max(w, h) > 1500:
+                scale = 1500.0 / max(w, h)
+                osd_img = image.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
+            else:
+                osd_img = image
+
+            osd = pytesseract.image_to_osd(osd_img, output_type=pytesseract.Output.DICT)
+            rotate_angle = osd.get("rotate", 0)
+            conf = osd.get("orientation_conf", 0)
+
+            if rotate_angle and rotate_angle in (90, 180, 270) and conf >= 2.0:
+                pil_angle = (360 - rotate_angle) % 360
+                return image.rotate(pil_angle, expand=True)
+        except Exception:
+            pass
+        return image
+
     def _perform_tesseract(self, image: Image.Image) -> Tuple[str, Optional[float]]:
         """Executes Tesseract OCR on a PIL Image."""
         try:
+            image = self._auto_rotate_image(image)
             proc_img = self._preprocess_image_for_tesseract(image)
             oem = getattr(settings, "TESSERACT_OEM", 1)
             custom_config = f"--oem {oem} --psm {self.tesseract_psm}"

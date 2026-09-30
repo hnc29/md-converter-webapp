@@ -1,2 +1,0 @@
-INFO:     127.0.0.1:62444 - "GET /api/ingestion-status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62445 - "GET /ingestion HTTP/1.1" 404 Not Found

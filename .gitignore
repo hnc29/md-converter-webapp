@@ -13,4 +13,7 @@ backend/storage/tmp/*
 backups/
 *.zip
 *.tar.gz
+*.log
+backend/storage/*.log
+storage/*.log
 

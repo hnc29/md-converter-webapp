@@ -78,6 +78,137 @@ VIETNAMESE_ADMIN_REPLACEMENTS = [
     (r'\bcủa dyn vi\b', 'của đơn vị'),
     (r'\btổng mức dau tư\b', 'tổng mức đầu tư'),
     (r'\bchi trương\b', 'chủ trương'),
+    
+    # Telecom & Technical quality metrics (4G/LTE, OSS, Drive test)
+    (r'\bchi tieu quilt ly\b', 'chỉ tiêu quản lý'),
+    (r'\bchi tieu quan ly\b', 'chỉ tiêu quản lý'),
+    (r'\bch[iI]t luarng\b', 'chất lượng'),
+    (r'\bchAt luvng\b', 'chất lượng'),
+    (r'\bchat ltryng\b', 'chất lượng'),
+    (r'\bchAt hrcyng\b', 'chất lượng'),
+    (r'\btam thiri\b', 'tạm thời'),
+    (r'\btam thoi\b', 'tạm thời'),
+    (r'\bAM THIJI\b', 'TẠM THỜI'),
+    (r'\bFTAM THỜI\b', 'TẠM THỜI'),
+    (r'\bmang 4G/LTE cua VNPT\b', 'mạng 4G/LTE của VNPT'),
+    (r'\bPHTJ LUC\b', 'PHỤ LỤC'),
+    (r'\bPH-Cf LUC\b', 'PHỤ LỤC'),
+    (r'\bPHU LUC\b', 'PHỤ LỤC'),
+    (r'\bDinh nghla\b', 'Định nghĩa'),
+    (r'\bDinh ngliia\b', 'Định nghĩa'),
+    (r'\bDinh nghTa\b', 'Định nghĩa'),
+    (r'\bDinh nghia\b', 'Định nghĩa'),
+    (r'\bPhuang phap xac dinh\b', 'Phương pháp xác định'),
+    (r'\bPhucmg phap xac dinh\b', 'Phương pháp xác định'),
+    (r'\bPhuong phap xac dinh\b', 'Phương pháp xác định'),
+    (r'\bCong thirc tinh\b', 'Công thức tính'),
+    (r'\bCong -auk tinh\b', 'Công thức tính'),
+    (r'\bC6ng tilde tinh\b', 'Công thức tính'),
+    (r'\bC8ng thirc tinh\b', 'Công thức tính'),
+    (r'\bTan suit va Phuang phap th6ng ke\b', 'Tần suất và phương pháp thống kê'),
+    (r'\bTan suit va Phuong phap thOng ke\b', 'Tần suất và phương pháp thống kê'),
+    (r'\bTL suAt va phucmg phap thong\b', 'Tần suất và phương pháp thống kê'),
+    (r'\bSO luting\b', 'Số lượng'),
+    (r'\bSO hro•ng\b', 'Số lượng'),
+    (r'\bS6 luting\b', 'Số lượng'),
+    (r'\bSo hro•ng\b', 'Số lượng'),
+    (r'\bSO Wong\b', 'Số lượng'),
+    (r'\bket not\b', 'kết nối'),
+    (r'\bk6t not\b', 'kết nối'),
+    (r'\b1\(61 not\b', 'kết nối'),
+    (r'\bthanh ding\b', 'thành công'),
+    (r'\bthanh cong\b', 'thành công'),
+    (r'\byeu cau\b', 'yêu cầu'),
+    (r'\byeu cAu\b', 'yêu cầu'),
+    (r'\byen cau\b', 'yêu cầu'),
+    (r'\byeu cL\b', 'yêu cầu'),
+    (r'\bchuyen giao\b', 'chuyển giao'),
+    (r'\bchuy6n giao\b', 'chuyển giao'),
+    (r'\bchuy\'L giao\b', 'chuyển giao'),
+    (r'\bchuy8n giao\b', 'chuyển giao'),
+    (r'\btan so\b', 'tần số'),
+    (r'\btan s6\b', 'tần số'),
+    (r'\bcuoc goi\b', 'cuộc gọi'),
+    (r'\bcuOc goi\b', 'cuộc gọi'),
+    (r'\bcultic goi\b', 'cuộc gọi'),
+    (r'\bcue goi\b', 'cuộc gọi'),
+    (r'\bkhac tan so\b', 'khác tần số'),
+    (r'\bkhac tan s6\b', 'khác tần số'),
+    (r'\bding tan so\b', 'cùng tần số'),
+    (r'\bcling tan s6\b', 'cùng tần số'),
+    (r'\bcimg tan so\b', 'cùng tần số'),
+    (r'\btai nguyen RB\b', 'tài nguyên RB'),
+    (r'\btai nguyen\b', 'tài nguyên'),
+    (r'\bhuong downlink\b', 'hướng downlink'),
+    (r'\bhuOng downlink\b', 'hướng downlink'),
+    (r'\bhuong Uplink\b', 'hướng Uplink'),
+    (r'\bhuang Uplink\b', 'hướng Uplink'),
+    (r'\bHieu suit sir dung\b', 'Hiệu suất sử dụng'),
+    (r'\bHieu suit\b', 'Hiệu suất'),
+    (r'\bvo tuyen\b', 'vô tuyến'),
+    (r'\bvo tuy\'L\b', 'vô tuyến'),
+    (r'\bvo tuy8n\b', 'vô tuyến'),
+    (r'\bvo tuyk\b', 'vô tuyến'),
+    (r'\btruy nhap\b', 'truy nhập'),
+    (r'\btruy nhfip\b', 'truy nhập'),
+    (r'\bphan doan\b', 'phân đoạn'),
+    (r'\bphin doan\b', 'phân đoạn'),
+    (r'\bhe thong OSS\b', 'hệ thống OSS'),
+    (r'\bhe thOng OSS\b', 'hệ thống OSS'),
+    (r'\b1116 thOng OSS\b', 'hệ thống OSS'),
+    (r'\bDo kiem\b', 'Đo kiểm'),
+    (r'\bDo kie\'m\b', 'Đo kiểm'),
+    (r'\bmo phOng\b', 'mô phỏng'),
+    (r'\bmo ph\'Ong\b', 'mô phỏng'),
+    (r'\btoi thieu\b', 'tối thiểu'),
+    (r'\bthi thi\'eu\b', 'tối thiểu'),
+    (r'\bt6i thi6u\b', 'tối thiểu'),
+    (r'\bdieu kien do kiem\b', 'điều kiện đo kiểm'),
+    (r'\bngoai troi\b', 'ngoài trời'),
+    (r'\bngodi trod\b', 'ngoài trời'),
+    (r'\bngoai trgi\b', 'ngoài trời'),
+    (r'\btrong nha\b', 'trong nhà'),
+    (r'\bco dinh\b', 'cố định'),
+    (r'\bc6 dinh\b', 'cố định'),
+    (r'\bdi dong\b', 'di động'),
+    (r'\bdi dOng\b', 'di động'),
+    (r'\bdi Ong\b', 'di động'),
+    (r'\bthue bao\b', 'thuê bao'),
+    (r'\bkhoang cach\b', 'khoảng cách'),
+    (r'\bkhoang each\b', 'khoảng cách'),
+    (r'\bben xe o to\b', 'bến xe ô tô'),
+    (r'\bben xe 6 to\b', 'bến xe ô tô'),
+    (r'\bblenh vien\b', 'bệnh viện'),
+    (r'\bhao tang\b', 'bảo tàng'),
+    (r'\bdog trinh cong Ong\b', 'công trình công cộng'),
+    (r'\bcong trinh cong cong\b', 'công trình công cộng'),
+    (r'\bcling hang khong\b', 'cảng hàng không'),
+    (r'\bcang hang khong\b', 'cảng hàng không'),
+    (r'\bnha ga tau hoa\b', 'nhà ga tàu hỏa'),
+    (r'\bnha ga tau hem\b', 'nhà ga tàu hỏa'),
+    (r'\bbOn tau h6a\b', 'bến tàu hỏa'),
+    (r'\bDo kha dung\b', 'Độ khả dụng'),
+    (r'\bD6 kha dung\b', 'Độ khả dụng'),
+    (r'\bDO kha dung\b', 'Độ khả dụng'),
+    (r'\b613 kha dung\b', 'độ khả dụng'),
+    (r'\bguy dinh tai QuOt clinh so\b', 'quy định tại Quyết định số'),
+    (r'\bquy dinh tai Quyet dinh so\b', 'quy định tại Quyết định số'),
+    (r'\bTong cong ty\b', 'Tổng công ty'),
+    (r'\bTOng cong ty\b', 'Tổng công ty'),
+    (r'\bPho Tong giam doc\b', 'Phó Tổng Giám đốc'),
+    (r'\bPHO TONG GIAI4 DOC\b', 'PHÓ TỔNG GIÁM ĐỐC'),
+    (r'\bTong giam doc\b', 'Tổng Giám đốc'),
+    (r'\bTONG GIAM DOC\b', 'TỔNG GIÁM ĐỐC'),
+    (r'\bChanh Van phong\b', 'Chánh Văn phòng'),
+    (r'\bTrtrOng cac Ban\b', 'Trưởng các Ban'),
+    (r'\bTruong cac Ban\b', 'Trưởng các Ban'),
+    (r'\bBan Cong nghe - Mang\b', 'Ban Công nghệ - Mạng'),
+    (r'\bBan Chat luting\b', 'Ban Chất lượng'),
+    (r'\bBan Chat luong\b', 'Ban Chất lượng'),
+    (r'\bTo Manh Cuong\b', 'Tô Mạnh Cường'),
+    (r'\bTO Manh Cuong\b', 'Tô Mạnh Cường'),
+    (r'\b(?:TS\/|Ty|TS,|TiS)\s+1e\b', 'Tỷ lệ'),
+    (r'\b1\)?7\s+lO\b', 'Tỷ lệ'),
 ]
 
 class VietnameseProcessor:
@@ -96,38 +227,33 @@ class VietnameseProcessor:
         cleaned_lines: List[str] = []
 
         for line in lines:
-            s = line.strip()
+            # Inline strip email watermark and timestamp patterns without dropping whole line
+            cleaned = re.sub(
+                r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:[_\s]*\d{1,2}:\d{2}(?:\s+\d{1,2}/\d{1,2}/\d{2,4})?)?",
+                "",
+                line,
+                flags=re.IGNORECASE
+            )
+            cleaned = re.sub(r"\b\d{1,2}:\d{2}\s+\d{1,2}/\d{1,2}/\d{2,4}\b", "", cleaned)
+            s = cleaned.strip()
             if not s:
-                cleaned_lines.append("")
-                continue
-
-            # Remove email watermark (e.g. hoangnc@vnpt.vn)
-            if re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", s):
-                continue
-
-            # Remove timestamp patterns (e.g. 16:37 15/09/2026)
-            if re.search(r"\d{2}:\d{2}\s+\d{2}/\d{2}/\d{4}", s):
                 continue
 
             # Remove standalone page indicator (e.g. 1/6, 2/6, 6/6)
-            if re.match(r"^\s*\d+/\d+\s*$", s):
+            if re.match(r"^\d+/\d+$", s):
                 continue
 
-            # Remove isolated single/double digit lines like "2" on signature page
-            if re.match(r"^\s*\d{1,2}\s*$", s):
-                continue
-
-            # Remove noise strings with non-alphanumeric OCR remnants
-            if re.match(r"^[#@&~`^_\-|\/\\\s\d:.,+*%<>=]+$", s) and len(s) < 25:
+            # Remove noise strings with non-alphanumeric OCR remnants (e.g. "—", "---", "|", "~")
+            if re.match(r"^[#@&~`^_\-|\/\\\s:.,+*%<>=]+$", s) and len(s) < 25:
                 continue
 
             # Remove short random noise tokens (e.g., "c@", "vs\"", "oy", "\O")
             if re.match(r"^[a-zA-Z0-9@_`~^|\\/]{1,3}$", s) and s.lower() not in (
-                "bộ", "và", "do", "số", "từ", "của", "về", "nơi", "tm", "iv", "iii", "ii", "i"
+                "bộ", "và", "do", "số", "từ", "của", "về", "nơi", "tm", "iv", "iii", "ii", "i", "dl", "ul"
             ):
                 continue
 
-            cleaned_lines.append(line)
+            cleaned_lines.append(cleaned)
 
         return "\n".join(cleaned_lines)
 

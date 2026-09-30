@@ -3,8 +3,9 @@ import json
 import zipfile
 import tempfile
 import shutil
+import asyncio
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
@@ -166,7 +167,7 @@ async def convert_batch_zip_endpoint(
                     ocr_engine=ocr_engine
                 )
                 base_name = Path(filename).stem
-                zip_file.writestr(f"{base_name}.md", res.markdown.encode("utf-8"))
+                _add_zip_entry(zip_file, f"{base_name}.md", res.markdown)
             finally:
                 if temp_path.exists():
                     temp_path.unlink(missing_ok=True)
@@ -225,6 +226,13 @@ async def convert_knowledge_base_endpoint(
             if p.exists():
                 p.unlink(missing_ok=True)
 
+def _add_zip_entry(zf: zipfile.ZipFile, arcname: str, data: bytes | str):
+    """Writes a zip entry with explicit UTF-8 flag bit (0x800) for cross-platform Unicode support."""
+    payload = data.encode("utf-8") if isinstance(data, str) else data
+    zinfo = zipfile.ZipInfo(arcname)
+    zinfo.flag_bits |= 0x800
+    zf.writestr(zinfo, payload)
+
 @router.post("/convert-knowledge-base/zip")
 async def convert_knowledge_base_zip_endpoint(
     files: List[UploadFile] = File(...),
@@ -267,31 +275,31 @@ async def convert_knowledge_base_zip_endpoint(
         files_data = [(fn, p) for fn, p, _ in saved_files]
         kb_result = orchestrator.process_knowledge_base(files_data, ocr_engine=ocr_engine)
 
-        # Build ZIP matching the EXACT Knowledge Package specification
+        # Build ZIP matching the EXACT Knowledge Package specification with UTF-8 encoding
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             # 1. upload_to_ai/ folder (ONLY safe Markdown files for AI)
             if not kb_result.is_single_mode and kb_result.master_index_md:
-                zf.writestr("upload_to_ai/00_Master_Index.md", kb_result.master_index_md.encode("utf-8"))
+                _add_zip_entry(zf, "upload_to_ai/00_Master_Index.md", kb_result.master_index_md)
 
             for doc in kb_result.upload_to_ai_documents:
                 base_name = Path(doc.filename).stem
-                zf.writestr(f"upload_to_ai/{base_name}.md", doc.markdown.encode("utf-8"))
+                _add_zip_entry(zf, f"upload_to_ai/{base_name}.md", doc.markdown)
 
             # 2. technical/ folder (manifest, report, and failed/ if any)
-            zf.writestr("technical/manifest.json", json.dumps(kb_result.manifest_json, ensure_ascii=False, indent=2).encode("utf-8"))
-            zf.writestr("technical/conversion_report.md", kb_result.conversion_report_md.encode("utf-8"))
+            _add_zip_entry(zf, "technical/manifest.json", json.dumps(kb_result.manifest_json, ensure_ascii=False, indent=2))
+            _add_zip_entry(zf, "technical/conversion_report.md", kb_result.conversion_report_md)
 
             for doc in kb_result.failed_documents:
                 base_name = Path(doc.filename).stem
-                zf.writestr(f"technical/failed/{base_name}.md", doc.markdown.encode("utf-8"))
+                _add_zip_entry(zf, f"technical/failed/{base_name}.md", doc.markdown)
 
             # 3. source/ folder
             for fn, _, content in saved_files:
-                zf.writestr(f"source/{fn}", content)
+                _add_zip_entry(zf, f"source/{fn}", content)
 
             # 4. README.txt
-            zf.writestr("README.txt", kb_result.readme_txt.encode("utf-8"))
+            _add_zip_entry(zf, "README.txt", kb_result.readme_txt)
 
         zip_buffer.seek(0)
         return StreamingResponse(
@@ -304,3 +312,109 @@ async def convert_knowledge_base_zip_endpoint(
         for p in temp_files_to_clean:
             if p.exists():
                 p.unlink(missing_ok=True)
+
+@router.post("/convert-knowledge-base/stream")
+async def convert_knowledge_base_stream_endpoint(
+    files: List[UploadFile] = File(...),
+    ocr_engine: str = Form("tesseract")
+):
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No files provided for streaming conversion."
+        )
+
+    saved_files: List[Tuple[str, Path]] = []
+    temp_files_to_clean: List[Path] = []
+
+    for file in files:
+        filename = file.filename or "document.txt"
+        ext = Path(filename).suffix.lower()
+
+        if ext not in settings.ALLOWED_EXTENSIONS:
+            continue
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+        temp_path = Path(temp_file.name)
+        temp_files_to_clean.append(temp_path)
+
+        while chunk := await file.read(1024 * 1024):
+            temp_file.write(chunk)
+        temp_file.flush()
+        temp_file.close()
+
+        saved_files.append((filename, temp_path))
+
+    if not saved_files:
+        for p in temp_files_to_clean:
+            p.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="None of the uploaded files have supported extensions."
+        )
+
+    async def sse_event_generator():
+        total_files = len(saved_files)
+        queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def sync_progress_callback(event_data: dict):
+            loop.call_soon_threadsafe(queue.put_nowait, event_data)
+
+        async def worker():
+            try:
+                kb_result = await asyncio.to_thread(
+                    orchestrator.process_knowledge_base,
+                    saved_files,
+                    "VNPT-AI-Knowledge-Base",
+                    ocr_engine,
+                    sync_progress_callback
+                )
+                await queue.put({
+                    "type": "complete",
+                    "total_files": total_files,
+                    "completed_files": total_files,
+                    "remaining_files": 0,
+                    "percent": 100,
+                    "result": kb_result.model_dump()
+                })
+            except Exception as e:
+                await queue.put({
+                    "type": "error",
+                    "message": f"Lỗi chuyển đổi: {str(e)}"
+                })
+
+        asyncio.create_task(worker())
+
+        try:
+            # Yield initial status
+            init_event = {
+                "type": "init",
+                "total_files": total_files,
+                "completed_files": 0,
+                "remaining_files": total_files,
+                "percent": 0,
+                "message": f"Bắt đầu xử lý {total_files} tài liệu..."
+            }
+            yield f"data: {json.dumps(init_event, ensure_ascii=False)}\n\n"
+
+            while True:
+                item = await queue.get()
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+                if item.get("type") in ("complete", "error"):
+                    break
+        finally:
+            for p in temp_files_to_clean:
+                if p.exists():
+                    p.unlink(missing_ok=True)
+
+    return StreamingResponse(
+        sse_event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
